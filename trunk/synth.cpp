@@ -127,45 +127,35 @@ static inline float FastTanh(float x)
 static const float POLYBLEP_WIDTH = 1.5f;
 
 // Valimaki/Huovilainen PolyBLEP
-static inline float PolyBLEP(float t, float dt)
+static inline float PolyBLEP(float t, float w)
 {
-	float const w = Min(dt * POLYBLEP_WIDTH, 0.5f);
-	if (t < w)
-	{
-		t /= w;
+	if (t > w)
+		return 0.0f;
+	if (t < -w)
+		return 0.0f;
+	t /= w;
+	if (t > 0.0f)
 		return t + t - t * t - 1;
-	}
-	if (t > 1 - w)
-	{
-		t -= 1;
-		t /= w;
+	else
 		return t * t + t + t + 1;
-	}
-	return 0;
 }
 
 static const float INTEGRATED_POLYBLEP_WIDTH = 1.5f;
 
 // symbolically-integrated PolyBLEP
-static inline float IntegratedPolyBLEP(float t, float dt)
+static inline float IntegratedPolyBLEP(float t, float w)
 {
-	float const w = Min(dt * INTEGRATED_POLYBLEP_WIDTH, 0.5f);
-	if (t < w)
-	{
-		t /= w;
-		float const t2 = t * t;
-		float const t3 = t2 * t;
+	if (t > w)
+		return 0.0f;
+	if (t < -w)
+		return 0.0f;
+	t /= w;
+	float const t2 = t * t;
+	float const t3 = t2 * t;
+	if (t > 0.0f)
 		return (0.33333333f - t + t2 - 0.33333333f * t3) * 4 * w;
-	}
-	if (t > 1 - dt * INTEGRATED_POLYBLEP_WIDTH)
-	{
-		t -= 1;
-		t /= w;
-		float const t2 = t * t;
-		float const t3 = t2 * t;
+	else
 		return (0.33333333f + t + t2 + 0.33333333f * t3) * 4 * w;
-	}
-	return 0.0f;
 }
 #endif
 
@@ -248,39 +238,52 @@ static char poly4[(1 << 4) - 1];
 static char poly5[(1 << 5) - 1];
 static char poly17[(1 << 17) - 1];
 
-// oscillator update function
-typedef float(*OscillatorFunc)(float step, float phase, int loops, float param);
+// oscillator update functions
+struct OscillatorConfig;
+struct OscillatorState;
+typedef float(*OscillatorFunc)(OscillatorConfig const &config, OscillatorState &state, float step);
+typedef void(*OscillatorLoopFunc)(OscillatorConfig const &config, OscillatorState &state, float step);
+
 
 // low frequency oscillator configuration
-struct LFOConfig
+struct OscillatorConfig
 {
 	Wave wavetype;
 	float waveparam;
 	float frequency;
+	float amplitude;
+
+	OscillatorConfig()
+		: wavetype(WAVE_SINE)
+		, waveparam(0.5f)
+		, frequency(1.0f)
+		, amplitude(1.0f)
+	{
+	}
 };
-LFOConfig lfo_config = { WAVE_SINE, 0.5f, 1.0f };
+OscillatorConfig lfo_config;
 // TO DO: multiple LFOs?
 // TO DO: LFO key sync
 // TO DO: LFO temp sync?
 // TO DO: LFO keyboard follow dial?
 
-// low frequency oscillator state
-struct LFOState
+// oscillator state
+struct OscillatorState
 {
+	float value;
 	float phase;
 	int loops;
 
-	float Update(LFOConfig const &config, float const step);
+	float Update(OscillatorConfig const &config, float frequency, float const step);
 };
-LFOState lfo_state;
+OscillatorState lfo_state;
 
-// oscillator configuration
-struct OscillatorConfig
+// note oscillator configuration
+struct NoteOscillatorConfig : public OscillatorConfig
 {
-	// editable properties
-	Wave wavetype;
+	// base parameters
 	float waveparam_base;
-	float frequency_base;	// relative to key
+	float frequency_base;	// offset from key frequency in semitones
 	float amplitude_base;
 
 	// LFO modulation parameters
@@ -288,25 +291,25 @@ struct OscillatorConfig
 	float frequency_lfo;
 	float amplitude_lfo;
 
-	// shared state
-	float waveparam;
-	float frequency;
-	float amplitude;
+	NoteOscillatorConfig()
+		: OscillatorConfig()
+		, waveparam_base(0.5f)
+		, frequency_base(0.0f)
+		, amplitude_base(1.0f)
+		, waveparam_lfo(0.0f)
+		, frequency_lfo(0.0f)
+		, amplitude_lfo(0.0f)
+	{
+		wavetype = WAVE_SAWTOOTH;
+	}
 };
-OscillatorConfig osc_config = { WAVE_TRIANGLE, 0.5f, 0.0f, 1.0f, 0.0f, 0.0f, 0.0f };
+NoteOscillatorConfig osc_config;
 // TO DO: multiple oscillators
 // TO DO: hard sync
 // TO DO: keyboard follow dial?
 // TO DO: oscillator mixer
 
-// oscillator state
-struct OscillatorState
-{
-	float phase;
-	int loops;
-
-	float Update(OscillatorConfig const &config, float const frequency, float const step);
-};
+// note oscillator state
 OscillatorState osc_state[KEYS];
 
 // envelope generator configuration
@@ -458,12 +461,19 @@ char const * const wave_name[WAVE_COUNT] =
 	"Sine", "Pulse", "Sawtooth", "Triangle", "Poly4", "Poly5", "Poly17", "Noise"
 };
 
+// starting value
+float const wave_start_value[WAVE_COUNT] =
+{
+	0.0f, 0.0f, 0.0f, 0.0f, 1.0f, 1.0f, 1.0f, 0.0f
+};
+
 // multiply oscillator time scale based on wave type
 // - tune the pitch of short-period poly oscillators
-// - raise the pitch of poly oscillators by two octaves
+// - raise the pitch of poly oscillators by a factor of two
+// - Atari POKEY pitch 255 corresponds to key 9 (N) in octave 2
 float const wave_adjust_frequency[WAVE_COUNT] =
 {
-	1.0f, 1.0f, 1.0f, 1.0f, 4.0f * 15 / 16, 4.0f * 31 / 32, 4.0f, 1.0f
+	1.0f, 1.0f, 1.0f, 1.0f, 2.0f * 15.0f / 16.0f, 2.0f * 31.0f / 32.0f, 2.0f, 1.0f
 };
 
 // restart the oscillator loop index after this many phase cycles
@@ -474,59 +484,30 @@ int const wave_loop_cycle[WAVE_COUNT] =
 };
 
 // sine oscillator
-float OscillatorSine(float step, float phase, int loops, float param)
+float OscillatorSine(OscillatorConfig const &config, OscillatorState &state, float step)
 {
 	if (step > 0.5f)
 		return 0.0f;
-	return sinf(M_PI * 2.0f * phase);
+	float const value = sinf(M_PI * 2.0f * state.phase);
+	return value;
 }
-
-#ifdef BANDLIMITED_SAWTOOTH
-// bandlimited sawtooth wavetable
-float bandlimited_sawtooth[9][256];
-
-// generate wavetable
-// http://www.musicdsp.org/showArchiveComment.php?ArchiveID=17
-void InitSawtooth()
-{
-	// phase per sample step
-	float const step = 2.0f * M_PI / ARRAY_SIZE(bandlimited_sawtooth[0]);
-
-	// for each wavetable...
-	for (int w = 0; w < ARRAY_SIZE(bandlimited_sawtooth); ++w)
-	{
-		// sum the first 2**w harmonics
-		int const harmonics = 1 << w;
-		for (int n = 1; n <= harmonics; ++n)
-		{
-			// compute scale factor for this harmonic
-			// (scale higher harmonics to reduce Gibbs ringing artifacts)
-			float scale = (2.0f / M_PI) * Squared(cosf(0.5f * M_PI * float(n - 1) / harmonics)) / float(n);
-
-			// add the harmonic
-			for (int i = 0; i < ARRAY_SIZE(bandlimited_sawtooth[n]); ++i)
-			{
-				bandlimited_sawtooth[w][i] += sin(step * n * i) * scale;
-			}
-		}
-	}
-}
-#endif
 
 bool use_antialias = true;
 
 // sawtooth oscillator
 // - 2/pi sum k=1..infinity sin(k*2*pi*phase)/n
 // - smoothed transition to reduce aliasing
-float OscillatorSawtooth(float step, float phase, int loops, float param)
+float OscillatorSawtooth(OscillatorConfig const &config, OscillatorState &state, float step)
 {
 	if (step > 0.5f)
 		return 0.0f;
-	float value = 1.0f - 2.0f * phase;
+	float value = 1.0f - 2.0f * state.phase;
 #if ANTIALIAS == ANTIALIAS_POLYBLEP
 	if (use_antialias)
 	{
-		value += PolyBLEP(phase, step);
+		float const w = Min(step * POLYBLEP_WIDTH, 1.0f);
+		value += PolyBLEP(state.phase, w);
+		value += PolyBLEP(state.phase - 1, w);
 	}
 #endif
 	return value;
@@ -537,19 +518,19 @@ float OscillatorSawtooth(float step, float phase, int loops, float param)
 // - pulse width 0.5 is square wave
 // - 4/pi sum k=0..infinity sin((2*k+1)*2*pi*phase)/(2*k+1)
 // - smoothed transition to reduce aliasing
-float OscillatorPulse(float step, float phase, int loops, float param)
+float OscillatorPulse(OscillatorConfig const &config, OscillatorState &state, float step)
 {
 	if (step > 0.5f)
 		return 0.0f;
-	float value = phase < param ? 1.0f : -1.0f;
+	float value = state.phase < config.waveparam ? 1.0f : -1.0f;
 #if ANTIALIAS == ANTIALIAS_POLYBLEP
 	if (use_antialias)
 	{
-		value += PolyBLEP(phase, step);
-		float phase_down = phase + 1 - param;
-		if (phase_down >= 1.0f)
-			phase_down -= 1.0f;
-		value -= PolyBLEP(phase_down, step);
+		float const w = Min(step * POLYBLEP_WIDTH, 1.0f);
+		value -= PolyBLEP(state.phase + 1 - config.waveparam, w);
+		value += PolyBLEP(state.phase, w);
+		value -= PolyBLEP(state.phase - config.waveparam, w);
+		value += PolyBLEP(state.phase - 1, w);
 	}
 #endif
 	return value;
@@ -557,46 +538,90 @@ float OscillatorPulse(float step, float phase, int loops, float param)
 
 // triangle oscillator
 // - 8/pi**2 sum k=0..infinity (-1)**k sin((2*k+1)*2*pi*phase)/(2*k+1)**2
-float OscillatorTriangle(float step, float phase, int loops, float param)
+float OscillatorTriangle(OscillatorConfig const &config, OscillatorState &state, float step)
 {
 	if (step > 0.5f)
 		return 0.0f;
-	float value = fabsf(2 - fabsf(4 * phase - 1)) - 1;
+	float value = fabsf(2 - fabsf(4 * state.phase - 1)) - 1;
 #if ANTIALIAS == ANTIALIAS_POLYBLEP
 	if (use_antialias)
 	{
-		float phase_down = phase + 1.0f - 0.25f;
-		if (phase_down >= 1.0f)
-			phase_down -= 1.0f;
-		value -= IntegratedPolyBLEP(phase_down, step);
-		float phase_up = phase + 1.0f - 0.75f;
-		if (phase_up >= 1.0f)
-			phase_up -= 1.0f;
-		value += IntegratedPolyBLEP(phase_up, step);
+		float const w = Min(step * INTEGRATED_POLYBLEP_WIDTH, 0.5f);
+		value -= IntegratedPolyBLEP(state.phase + 0.75f, w);
+		value += IntegratedPolyBLEP(state.phase + 0.25f, w);
+		value -= IntegratedPolyBLEP(state.phase - 0.25f, w);
+		value += IntegratedPolyBLEP(state.phase - 0.75f, w);
 	}
 #endif
 	return value;
 }
 
+// shared poly oscillator
+float OscillatorPoly(OscillatorConfig const &config, OscillatorState &state, char poly[], int cycle, float step)
+{
+	float value = state.value;
+#if ANTIALIAS == ANTIALIAS_POLYBLEP
+	if (use_antialias)
+	{
+		float w = Min(step * POLYBLEP_WIDTH, 1.0f);
+		if (state.phase < w)
+		{
+			if (poly[state.loops])
+				value += state.value * PolyBLEP(state.phase, w);
+		}
+		if (state.phase > 1.0f - w)
+		{
+			int next_loop = state.loops + 1;
+			if (next_loop >= cycle)
+				next_loop = 0;
+			if (poly[next_loop])
+				value -= state.value * PolyBLEP(state.phase - 1, w);
+		}
+	}
+#endif
+	return value;
+}
+void OscillatorPolyLoop(OscillatorConfig const &config, OscillatorState &state, char poly[], int cycle, float step)
+{
+	if (++state.loops >= cycle)
+		state.loops = 0;
+
+	// toggle output value when the poly table value is true
+	if (poly[state.loops])
+		state.value = -state.value;
+}
+
 // poly4 oscillator
 // 4-bit linear feedback shift register noise
-float OscillatorPoly4(float step, float phase, int loops, float param)
+float OscillatorPoly4(OscillatorConfig const &config, OscillatorState &state, float step)
 {
-	return poly4[loops] ? 1.0f : -1.0f;
+	return OscillatorPoly(config, state, poly4, wave_loop_cycle[WAVE_POLY4], step);
+}
+void OscillatorPoly4Loop(OscillatorConfig const &config, OscillatorState &state, float step)
+{
+	OscillatorPolyLoop(config, state, poly4, wave_loop_cycle[WAVE_POLY4], step);
 }
 
 // poly5 oscillator
 // 5-bit linear feedback shift register noise
-float OscillatorPoly5(float step, float phase, int loops, float param)
+float OscillatorPoly5(OscillatorConfig const &config, OscillatorState &state, float step)
 {
-	return poly5[loops] ? 1.0f : -1.0f;
+	return OscillatorPoly(config, state, poly5, wave_loop_cycle[WAVE_POLY5], step);
+}
+void OscillatorPoly5Loop(OscillatorConfig const &config, OscillatorState &state, float step)
+{
+	OscillatorPolyLoop(config, state, poly5, wave_loop_cycle[WAVE_POLY5], step);
 }
 
 // poly17 oscillator
 // 17-bit linear feedback shift register noise
-float OscillatorPoly17(float step, float phase, int loops, float param)
+float OscillatorPoly17(OscillatorConfig const &config, OscillatorState &state, float step)
 {
-	return poly17[loops] ? 1.0f : -1.0f;
+	return OscillatorPoly(config, state, poly17, wave_loop_cycle[WAVE_POLY17], step);
+}
+void OscillatorPoly17Loop(OscillatorConfig const &config, OscillatorState &state, float step)
+{
+	OscillatorPolyLoop(config, state, poly17, wave_loop_cycle[WAVE_POLY17], step);
 }
 
 namespace Random
@@ -633,7 +658,7 @@ namespace Random
 }
 
 // white noise oscillator
-float OscillatorNoise(float step, float phase, int loops, float param)
+float OscillatorNoise(OscillatorConfig const &config, OscillatorState &state, float step)
 {
 	return Random::Float() * 2.0f - 1.0f;
 }
@@ -643,26 +668,10 @@ OscillatorFunc const oscillator[WAVE_COUNT] =
 {
 	OscillatorSine, OscillatorPulse, OscillatorSawtooth, OscillatorTriangle, OscillatorPoly4, OscillatorPoly5, OscillatorPoly17, OscillatorNoise
 };
-
-// update low-frequency oscillator
-float LFOState::Update(LFOConfig const &config, float const step)
+OscillatorLoopFunc const oscillator_loop[WAVE_COUNT] =
 {
-	float const delta = config.frequency * step;
-
-	// get oscillator value
-	float const value = oscillator[config.wavetype](delta, phase, loops, config.waveparam);
-
-	// accumulate oscillator phase
-	phase += delta;
-	if (phase >= 1.0f)
-	{
-		phase -= 1.0f;
-		if (++loops >= wave_loop_cycle[config.wavetype])
-			loops = 0;
-	}
-
-	return value;
-}
+	NULL, NULL, NULL, NULL, OscillatorPoly4Loop, OscillatorPoly5Loop, OscillatorPoly17Loop, NULL
+};
 
 // update oscillator
 float OscillatorState::Update(OscillatorConfig const &config, float const frequency, float const step)
@@ -670,21 +679,21 @@ float OscillatorState::Update(OscillatorConfig const &config, float const freque
 	float const delta = config.frequency * frequency * step;
 
 	// get oscillator value
-	float const value = config.amplitude * oscillator[config.wavetype](delta, phase, loops, config.waveparam);
+	float const value = config.amplitude * oscillator[config.wavetype](config, *this, delta);
 
 	// accumulate oscillator phase
 	phase += delta;
 	if (phase >= 1.0f)
 	{
 		phase -= 1.0f;
-		if (++loops >= wave_loop_cycle[config.wavetype])
-			loops = 0;
+		if (oscillator_loop[config.wavetype])
+			oscillator_loop[config.wavetype](config, *this, delta);
 	}
 	else if (phase < 0.0f)
 	{
 		phase += 1.0f;
-		if (--loops < 0)
-			loops = wave_loop_cycle[config.wavetype] - 1;
+		if (oscillator_loop[config.wavetype])
+			oscillator_loop[config.wavetype](config, *this, delta);
 	}
 
 	return value;
@@ -867,18 +876,16 @@ DWORD CALLBACK WriteStream(HSTREAM handle, short *buffer, DWORD length, void *us
 	// number of samples
 	size_t count = length / (2 * sizeof(short));
 
-#if 0
 	if (active == 0)
 	{
 		// clear buffer
 		memset(buffer, 0, length);
 
 		// advance low-frequency oscillator
-		lfo_state.Update(lfo_config, float(count) / info.freq);
+		lfo_state.Update(lfo_config, 1.0f, float(count) / info.freq);
 
 		return length;
 	}
-#endif
 
 	// time step per output sample
 	float const step = 1.0f / info.freq;
@@ -887,7 +894,7 @@ DWORD CALLBACK WriteStream(HSTREAM handle, short *buffer, DWORD length, void *us
 	for (size_t c = 0; c < count; ++c)
 	{
 		// get low-frequency oscillator value
-		float const lfo = lfo_state.Update(lfo_config, step);
+		float const lfo = lfo_state.Update(lfo_config, 1.0f, step);
 
 		// LFO wave parameter modulation
 		osc_config.waveparam = osc_config.waveparam_base + osc_config.waveparam_lfo * lfo;
@@ -1030,6 +1037,7 @@ void MenuLFO(HANDLE hOut, WORD key, DWORD modifiers)
 			lfo_config.wavetype = Wave((lfo_config.wavetype + WAVE_COUNT + sign) % WAVE_COUNT);
 			lfo_state.phase = 0.0f;
 			lfo_state.loops = 0;
+			lfo_state.value = wave_start_value[lfo_config.wavetype];
 			break;
 		case 1:
 			if (modifiers & (LEFT_CTRL_PRESSED | RIGHT_CTRL_PRESSED))
@@ -1097,6 +1105,7 @@ void MenuOSC(HANDLE hOut, WORD key, DWORD modifiers)
 			{
 				osc_state[k].phase = 0.0f;
 				osc_state[k].loops = 0;
+				osc_state[k].value = wave_start_value[osc_config.wavetype];
 			}
 			break;
 		case 1:
@@ -1544,27 +1553,90 @@ void UpdateOscillatorWaveformDisplay(HANDLE hOut)
 {
 	// show the oscillator wave shape
 	// (using the lowest key frequency as reference)
-	CHAR_INFO const plot_fill = { 0, BACKGROUND_BLUE };
-	CHAR_INFO const plot_top = { 223, BACKGROUND_BLUE | FOREGROUND_RED | FOREGROUND_GREEN | FOREGROUND_BLUE };
-	CHAR_INFO const plot_bottom = { 220, FOREGROUND_RED | FOREGROUND_GREEN | FOREGROUND_BLUE };
-	CHAR_INFO plot_buf[21][80] = { 0 };
-	COORD plot_pos = { 0, 0 };
-	COORD plot_size = { 80, 21 };
-	SMALL_RECT plot_region = { 0, 50 - 21, 79, 49 };
-	float const fake_step = keyboard_frequency[0] * keyboard_timescale * osc_config.frequency / info.freq;
+	CHAR_INFO const fill = { 0, BACKGROUND_GREEN };
+	CHAR_INFO const plot[2] = {
+		{ 223, BACKGROUND_GREEN | FOREGROUND_RED | FOREGROUND_GREEN | FOREGROUND_BLUE },
+		{ 220, FOREGROUND_RED | FOREGROUND_GREEN | FOREGROUND_BLUE }
+	};
+	CHAR_INFO buf[21][80] = { 0 };
+	COORD const pos = { 0, 0 };
+	COORD const size = { 80, 21 };
+	SMALL_RECT region = { 0, 50 - 21, 79, 49 };
+
+	// local copy of oscillator config
+	NoteOscillatorConfig config = osc_config;
+
+	// get low-frequency oscillator value
+	float const lfo = lfo_state.Update(lfo_config, 1.0f, 0.0f);
+
+	// LFO wave parameter modulation
+	config.waveparam = config.waveparam_base + config.waveparam_lfo * lfo;
+
+	// LFO frequency modulation
+	config.frequency = powf(2.0f, config.frequency_base + config.frequency_lfo * lfo) * wave_adjust_frequency[config.wavetype];
+
+	// LFO amplitude modulation
+	config.amplitude = config.amplitude_base * powf(2.0f, config.amplitude_lfo * lfo);
+
+	// phase step for plot
+	float const step = Min(float(wave_loop_cycle[config.wavetype]) / 80.0f, 1.0f);
+
+	// local copy of oscillator state
+	OscillatorState state = { wave_start_value[config.wavetype], 0.5f * step, 0 };
+
+	// delta time as seen by the oscillator
+	float const delta = keyboard_frequency[0] * keyboard_timescale * config.frequency * wave_adjust_frequency[config.wavetype] / info.freq;
+
 	for (int x = 0; x < 80; ++x)
 	{
-		float const osc = osc_config.amplitude * oscillator[osc_config.wavetype](fake_step, (float(x) + 0.5f) / 80.0f, 0.0f, osc_config.waveparam);
+		float const osc = config.amplitude * oscillator[config.wavetype](config, state, delta);
 		int grid_y = int(20 - osc * 20);
 		int y = grid_y >> 1;
 		if (y < 0)
 			y = -1;
 		else if (y < 21)
-			plot_buf[y][x] = (grid_y & 1) ? plot_bottom : plot_top;
+			buf[y][x] = plot[grid_y & 1];
 		for (y += 1; y < 21; ++y)
-			plot_buf[y][x] = plot_fill;
+			buf[y][x] = fill;
+		if (state.loops & 1)
+		{
+			for (y = 0; y < 21; ++y)
+				buf[y][x].Attributes |= BACKGROUND_BLUE;
+		}
+		state.phase += step;
+		if (state.phase >= 1.0f)
+		{
+			state.phase -= 1.0f;
+			if (oscillator_loop[config.wavetype])
+				oscillator_loop[config.wavetype](config, state, step);
+		}
+
 	}
-	WriteConsoleOutput(hOut, &plot_buf[0][0], plot_size, plot_pos, &plot_region);
+	WriteConsoleOutput(hOut, &buf[0][0], size, pos, &region);
+}
+
+void UpdateLowFrequencyOscillatorDisplay(HANDLE hOut)
+{
+	// initialize buffer
+	CHAR_INFO const negative = { 0, BACKGROUND_RED | FOREGROUND_RED | FOREGROUND_GREEN | FOREGROUND_BLUE };
+	CHAR_INFO const positive = { 0, BACKGROUND_GREEN | FOREGROUND_RED | FOREGROUND_GREEN | FOREGROUND_BLUE };
+	CHAR_INFO buf[18];
+	for (int x = 0; x < 9; x++)
+		buf[x] = negative;
+	for (int x = 9; x < 18; ++x)
+		buf[x] = positive;
+
+	// plot low-frequency oscillator value
+	CHAR const plot[2] = { 221, 222 };
+	float const lfo = lfo_state.Update(lfo_config, 1.0f, 0.0f);
+	int grid_x = Clamp(int(18.0f * lfo + 18.0f), 0, 35);
+	buf[grid_x / 2].Char.AsciiChar = plot[grid_x & 1];
+
+	// draw the gauge
+	COORD const pos = { 0, 0 };
+	COORD const size = { 18, 1 };
+	SMALL_RECT region = { 1, 16, 18, 16 };
+	WriteConsoleOutput(hOut, &buf[0], size, pos, &region);
 }
 
 void Clear(HANDLE hOut)
@@ -1722,7 +1794,7 @@ void main(int argc, char **argv)
 					}
 					else if (code == VK_OEM_4)	// '['
 					{
-						if (keyboard_octave > 1)
+						if (keyboard_octave > 0)
 						{
 							--keyboard_octave;
 							keyboard_timescale *= 0.5f;
@@ -1731,7 +1803,7 @@ void main(int argc, char **argv)
 					}
 					else if (code == VK_OEM_6)	// ']'
 					{
-						if (keyboard_octave < 7)
+						if (keyboard_octave < 8)
 						{
 							++keyboard_octave;
 							keyboard_timescale *= 2.0f;
@@ -1826,6 +1898,7 @@ void main(int argc, char **argv)
 		UpdateOscillatorWaveformDisplay(hOut);
 
 		// update the low-frequency oscillator dispaly
+		UpdateLowFrequencyOscillatorDisplay(hOut);
 
 		// sleep for 1/60th of second
 		Sleep(16);
