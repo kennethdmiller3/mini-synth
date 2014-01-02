@@ -530,6 +530,10 @@ float OscillatorPulse(OscillatorConfig const &config, OscillatorState &state, fl
 {
 	if (step > 0.5f)
 		return 0.0f;
+	if (config.waveparam <= 0.0f)
+		return -1.0f;
+	if (config.waveparam >= 1.0f)
+		return 1.0f;
 	float value = state.phase < config.waveparam ? 1.0f : -1.0f;
 #if ANTIALIAS == ANTIALIAS_POLYBLEP
 	if (use_antialias)
@@ -539,6 +543,7 @@ float OscillatorPulse(OscillatorConfig const &config, OscillatorState &state, fl
 		value += PolyBLEP(state.phase, w);
 		value -= PolyBLEP(state.phase - config.waveparam, w);
 		value += PolyBLEP(state.phase - 1, w);
+		value -= PolyBLEP(state.phase - 1 - config.waveparam, w);
 	}
 #endif
 	return value;
