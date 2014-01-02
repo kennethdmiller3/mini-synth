@@ -46,6 +46,12 @@ int DebugPrint(const char *format, ...)
 	return n;
 }
 
+// get the last error message
+void GetLastErrorMessage(CHAR buf[], DWORD size)
+{
+	FormatMessage(FORMAT_MESSAGE_FROM_SYSTEM, NULL, GetLastError(), MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT), buf, size, NULL);
+}
+
 // formatted write console output
 int PrintConsole(HANDLE out, COORD pos, const char *format, ...)
 {
@@ -1436,6 +1442,131 @@ MenuFunc menufunc[MENU_COUNT] =
 	MenuLFO, MenuOSC, MenuFLT, MenuVOL, MenuFX
 };
 
+// SPECTRUM ANALYZER
+// horizontal axis shows semitone frequency bands
+// vertical axis shows logarithmic power
+void UpdateSpectrumAnalyzer(HANDLE hOut)
+{
+	// get complex FFT data
+#define FREQUENCY_BINS 4096
+	float fft[FREQUENCY_BINS * 2][2];
+	BASS_ChannelGetData(stream, &fft[0][0], BASS_DATA_FFT8192 | BASS_DATA_FFT_COMPLEX);
+
+	// center frequency of the zeroth semitone band
+	// (one octave down from the lowest key)
+	float const freq_min = keyboard_frequency[0] * keyboard_timescale * 0.5f;
+
+	// get the lower frequency bin for the zeroth semitone band
+	// (half a semitone down from the center frequency)
+	float const semitone = powf(2.0f, 1.0f / 12.0f);
+	float freq = freq_min * FREQUENCY_BINS * 2.0f / info.freq / sqrtf(semitone);
+	int b0 = Max(int(freq), 0);
+
+	// get power in each semitone band
+	static float spectrum[SPECTRUM_WIDTH] = { 0 };
+	int xlimit = SPECTRUM_WIDTH;
+	for (int x = 0; x < SPECTRUM_WIDTH; ++x)
+	{
+		// get upper frequency bin for the current semitone
+		freq *= semitone;
+		int const b1 = Min(int(freq), FREQUENCY_BINS);
+
+		// ensure there's at least one bin
+		// (or quit upon reaching the last bin)
+		if (b0 == b1)
+		{
+			if (b1 == FREQUENCY_BINS)
+			{
+				xlimit = x;
+				break;
+			}
+			--b0;
+		}
+
+		// sum power across the semitone band
+		float scale = float(FREQUENCY_BINS) / float(b1 - b0);
+		float value = 0.0f;
+		for (; b0 < b1; ++b0)
+			value += fft[b0][0] * fft[b0][0] + fft[b0][1] * fft[b0][1];
+		spectrum[x] = scale * value;
+	}
+
+	// inaudible band
+	int xinaudible = int(logf(20000 / freq_min) * 12 / logf(2)) - 1;
+
+	// plot log-log spectrum
+	// each grid cell is one semitone wide and 6 dB high
+	CHAR_INFO buf[SPECTRUM_HEIGHT][SPECTRUM_WIDTH];
+	COORD const pos = { 0, 0 };
+	COORD const size = { SPECTRUM_WIDTH, SPECTRUM_HEIGHT };
+	SMALL_RECT region = { 0, 0, 79, 49 };
+	float threshold = 1.0f;
+	for (int y = 0; y < SPECTRUM_HEIGHT; ++y)
+	{
+		int x;
+		for (x = 0; x < xlimit; ++x)
+		{
+			if (spectrum[x] < threshold)
+				buf[y][x] = bar_empty;
+			else if (spectrum[x] < threshold * 2.0f)
+				buf[y][x] = bar_bottom;
+			else if (spectrum[x] < threshold * 4.0f)
+				buf[y][x] = bar_top;
+			else
+				buf[y][x] = bar_full;
+			if (x >= xinaudible)
+				buf[y][x].Attributes |= BACKGROUND_RED;
+		}
+		for (; x < SPECTRUM_WIDTH; ++x)
+		{
+			buf[y][x] = bar_nyquist;
+		}
+		threshold *= 0.25f;
+	}
+	WriteConsoleOutput(hOut, &buf[0][0], size, pos, &region);
+}
+
+void UpdateKeyVolumeEnvelopeDisplay(HANDLE hOut, EnvelopeState::State vol_env_display[])
+{
+	for (int k = 0; k < KEYS; k++)
+	{
+		if (vol_env_display[k] != vol_env_state[k].state)
+		{
+			vol_env_display[k] = vol_env_state[k].state;
+			COORD pos = { SHORT(key_pos.X + k), key_pos.Y };
+			DWORD written;
+			WriteConsoleOutputAttribute(hOut, &env_attrib[vol_env_display[k]], 1, pos, &written);
+		}
+	}
+}
+
+void UpdateOscillatorWaveformDisplay(HANDLE hOut)
+{
+	// show the oscillator wave shape
+	// (using the lowest key frequency as reference)
+	CHAR_INFO const plot_fill = { 0, BACKGROUND_BLUE };
+	CHAR_INFO const plot_top = { 223, BACKGROUND_BLUE | FOREGROUND_RED | FOREGROUND_GREEN | FOREGROUND_BLUE };
+	CHAR_INFO const plot_bottom = { 220, FOREGROUND_RED | FOREGROUND_GREEN | FOREGROUND_BLUE };
+	CHAR_INFO plot_buf[21][80] = { 0 };
+	COORD plot_pos = { 0, 0 };
+	COORD plot_size = { 80, 21 };
+	SMALL_RECT plot_region = { 0, 50 - 21, 79, 49 };
+	float const fake_step = keyboard_frequency[0] * keyboard_timescale * osc_config.frequency / info.freq;
+	for (int x = 0; x < 80; ++x)
+	{
+		float const osc = osc_config.amplitude * oscillator[osc_config.wavetype](fake_step, (float(x) + 0.5f) / 80.0f, 0.0f, osc_config.waveparam);
+		int grid_y = int(20 - osc * 20);
+		int y = grid_y >> 1;
+		if (y < 0)
+			y = -1;
+		else if (y < 21)
+			plot_buf[y][x] = (grid_y & 1) ? plot_bottom : plot_top;
+		for (y += 1; y < 21; ++y)
+			plot_buf[y][x] = plot_fill;
+	}
+	WriteConsoleOutput(hOut, &plot_buf[0][0], plot_size, plot_pos, &plot_region);
+}
+
 void Clear(HANDLE hOut)
 {
 	CONSOLE_SCREEN_BUFFER_INFO bufInfo;
@@ -1685,128 +1816,16 @@ void main(int argc, char **argv)
 			}
 		}
 
-		// SEMITONE POWER SPECTRUM
-		// horizontal axis shows semitone frequency bands
-		// vertical axis shows logarithmic power
-
-		// get complex FFT data
-#define FREQUENCY_BINS 4096
-		float fft[FREQUENCY_BINS * 2][2];
-		BASS_ChannelGetData(stream, &fft[0][0], BASS_DATA_FFT8192|BASS_DATA_FFT_COMPLEX);
-
-		// center frequency of the zeroth semitone band
-		// (one octave down from the lowest key)
-		float const freq_min = keyboard_frequency[0] * keyboard_timescale * 0.5f;
-
-		// get the lower frequency bin for the zeroth semitone band
-		// (half a semitone down from the center frequency)
-		float const semitone = powf(2.0f, 1.0f / 12.0f);
-		float freq = freq_min * FREQUENCY_BINS * 2.0f / info.freq / sqrtf(semitone);
-		int b0 = Max(int(freq), 0);
-
-		// get power in each semitone band
-		static float spectrum[SPECTRUM_WIDTH] = { 0 };
-		int xlimit = SPECTRUM_WIDTH;
-		for (int x = 0; x < SPECTRUM_WIDTH; ++x)
-		{
-			// get upper frequency bin for the current semitone
-			freq *= semitone;
-			int const b1 = Min(int(freq), FREQUENCY_BINS);
-
-			// ensure there's at least one bin
-			// (or quit upon reaching the last bin)
-			if (b0 == b1)
-			{
-				if (b1 == FREQUENCY_BINS)
-				{
-					xlimit = x;
-					break;
-				}
-				--b0;
-			}
-
-			// sum power across the semitone band
-			float scale = float(FREQUENCY_BINS) / float(b1 - b0);
-			float value = 0.0f;
-			for (; b0 < b1; ++b0)
-				value += fft[b0][0] * fft[b0][0] + fft[b0][1] * fft[b0][1];
-			spectrum[x] = scale * value;
-		}
-
-		// inaudible band
-		int xinaudible = int(logf(20000 / freq_min) * 12 / logf(2)) - 1;
-
-		// plot log-log spectrum
-		// each grid cell is one semitone wide and 6 dB high
-		CHAR_INFO buf[SPECTRUM_HEIGHT][SPECTRUM_WIDTH];
-		COORD const pos = { 0, 0 };
-		COORD const size = { SPECTRUM_WIDTH, SPECTRUM_HEIGHT };
-		SMALL_RECT region = { 0, 0, 79, 49 };
-		float threshold = 1.0f;
-		for (int y = 0; y < SPECTRUM_HEIGHT; ++y)
-		{
-			int x;
-			for (x = 0; x < xlimit; ++x)
-			{
-				if (spectrum[x] < threshold)
-					buf[y][x] = bar_empty;
-				else if (spectrum[x] < threshold * 2.0f)
-					buf[y][x] = bar_bottom;
-				else if (spectrum[x] < threshold * 4.0f)
-					buf[y][x] = bar_top;
-				else
-					buf[y][x] = bar_full;
-				if (x >= xinaudible)
-					buf[y][x].Attributes |= BACKGROUND_RED;
-			}
-			for (; x < SPECTRUM_WIDTH; ++x)
-			{
-				buf[y][x] = bar_nyquist;
-			}
-			threshold *= 0.25f;
-		}
-		WriteConsoleOutput(hOut, &buf[0][0], size, pos, &region);
+		// update the spectrum analyzer display
+		UpdateSpectrumAnalyzer(hOut);
 
 		// update note key volume envelope display
-		for (int k = 0; k < KEYS; k++)
-		{
-			if (vol_env_display[k] != vol_env_state[k].state)
-			{
-				vol_env_display[k] = vol_env_state[k].state;
-				COORD pos = { SHORT(key_pos.X + k), key_pos.Y };
-				DWORD written;
-				WriteConsoleOutputAttribute(hOut, &env_attrib[vol_env_display[k]], 1, pos, &written);
-			}
-		}
+		UpdateKeyVolumeEnvelopeDisplay(hOut, vol_env_display);
 
-		// show the oscillator wave shape
-		// (using the lowest key frequency as reference)
-		CHAR_INFO const plot_fill = { 0, BACKGROUND_BLUE };
-		CHAR_INFO const plot_top = { 223, BACKGROUND_BLUE | FOREGROUND_RED | FOREGROUND_GREEN | FOREGROUND_BLUE };
-		CHAR_INFO const plot_bottom = { 220, FOREGROUND_RED | FOREGROUND_GREEN | FOREGROUND_BLUE };
-		CHAR_INFO plot_buf[21][80] = { 0 };
-		COORD plot_pos = { 0, 0 };
-		COORD plot_size = { 80, 21 };
-		SMALL_RECT plot_region = { 0, 50 - 21, 79, 49 };
-		float const fake_step = keyboard_frequency[0] * keyboard_timescale * osc_config.frequency / info.freq;
-		for (int x = 0; x < 80; ++x)
-		{
-			float const osc = osc_config.amplitude * oscillator[osc_config.wavetype](fake_step, (float(x) + 0.5f) / 80.0f, 0.0f, osc_config.waveparam);
-			int grid_y = int(20 - osc * 20);
-			int y = grid_y >> 1;
-			if (y < 0)
-				y = -1;
-			else if (y < 21)
-				plot_buf[y][x] = (grid_y & 1) ? plot_bottom : plot_top;
-			for (y += 1; y < 21; ++y)
-				plot_buf[y][x] = plot_fill;
-		}
-		if (!WriteConsoleOutput(hOut, &plot_buf[0][0], plot_size, plot_pos, &plot_region))
-		{
-			CHAR buf[256];
-			FormatMessage(FORMAT_MESSAGE_FROM_SYSTEM, NULL, GetLastError(), MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT), buf, 256, NULL);
-			DebugPrint("Error plotting wave: %s", buf);
-		}
+		// update the oscillator waveform display
+		UpdateOscillatorWaveformDisplay(hOut);
+
+		// update the low-frequency oscillator dispaly
 
 		// sleep for 1/60th of second
 		Sleep(16);
