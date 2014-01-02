@@ -32,7 +32,7 @@ int DebugPrint(const char *format, ...)
 	va_start(ap, format);
 #ifdef WIN32
 	char buf[4096];
-	int n = vsnprintf(buf, sizeof(buf), format, ap);
+	int n = vsnprintf_s(buf, sizeof(buf), format, ap);
 	OutputDebugStringA(buf);
 #else
 	int n = vfprintf(stderr, format, ap);
@@ -47,7 +47,7 @@ int PrintConsole(HANDLE out, COORD pos, const char *format, ...)
 	va_list ap;
 	va_start(ap, format);
 	char buf[256];
-	int n = vsnprintf(buf, sizeof(buf), format, ap);
+	vsnprintf_s(buf, sizeof(buf), format, ap);
 	DWORD written;
 	WriteConsoleOutputCharacter(out, buf, strlen(buf), pos, &written);
 	return written;
@@ -62,7 +62,7 @@ void Error(char const *text)
 }
 
 #ifndef M_PI
-#define M_PI 3.14159265358979323846
+#define M_PI 3.14159265358979323846f
 #endif
 
 #define ARRAY_SIZE(x) (sizeof(x)/sizeof(x[0]))
@@ -189,7 +189,7 @@ LFOConfig lfo_config = { WAVE_SINE, 0.5f, 1.0f };
 struct LFOState
 {
 	float phase;
-	float loops;
+	int loops;
 
 	float Update(LFOConfig const &config, float const step);
 };
@@ -224,7 +224,7 @@ OscillatorConfig osc_config = { WAVE_SINE, 0.5f, 0.0f, 1.0f, 0.0f, 0.0f, 0.0f };
 struct OscillatorState
 {
 	float phase;
-	float loops;
+	int loops;
 
 	float Update(OscillatorConfig const &config, float const step);
 };
@@ -615,7 +615,7 @@ void FilterState::Setup(float cutoff, float resonance)
 
 	float const fn = FILTER_OVERSAMPLE * 0.5f * info.freq;
 	float const fc = cutoff < fn ? cutoff / fn : 1.0f;
-	float const g = 1 - exp(-M_PI * fc);
+	float const g = 1 - expf(-M_PI * fc);
 	feedback = 4.0f * resonance;
 	// y[n] = ((1.0 / 1.3) * x[n] + (0.3 / 1.3) * x[n-1] - y[n-1]) * g + y[n-1]
 	// y[n] = (g / 1.3) * x[n] + (g * 0.3 / 1.3) * x[n-1] - (g - 1) * y[n-1]
@@ -723,29 +723,24 @@ DWORD CALLBACK WriteStream(HSTREAM handle, short *buffer, DWORD length, void *us
 	// number of samples
 	size_t count = length / (2 * sizeof(short));
 
-	// low-frequency oscillator loops after this many cycles
-	float const lfo_loop_cycle = wave_loop_cycle[lfo_config.wavetype];
-
+#if 0
 	if (active == 0)
 	{
 		// clear buffer
 		memset(buffer, 0, length);
 
 		// advance low-frequency oscillator
-		lfo_state.Update(lfo_config, count / info.freq);
+		lfo_state.Update(lfo_config, float(count) / info.freq);
 
 		return length;
 	}
+#endif
 
 	// time step per output sample
 	float const step = 1.0f / info.freq;
 
-	// oscillator evaluation functions
-	OscillatorFunc lfo_func = oscillator[lfo_config.wavetype];
-	OscillatorFunc osc_func = oscillator[osc_config.wavetype];
-
 	// for each output sample...
-	for (int c = 0; c < count; ++c)
+	for (size_t c = 0; c < count; ++c)
 	{
 		// get low-frequency oscillator value
 		float const lfo = lfo_state.Update(lfo_config, step);
@@ -805,6 +800,7 @@ DWORD CALLBACK WriteStream(HSTREAM handle, short *buffer, DWORD length, void *us
 				flt_state[k].Apply(osc_value);
 				switch (flt_config.mode)
 				{
+				default:
 				case FilterConfig::ALLPASS:		flt_value = flt_state[k].y[0]; break;
 				case FilterConfig::LOWPASS_1:	flt_value = flt_state[k].y[1]; break;
 				case FilterConfig::LOWPASS_2:	flt_value = flt_state[k].y[2]; break;
@@ -912,7 +908,7 @@ void MenuLFO(HANDLE hOut, WORD key, DWORD modifiers)
 
 	for (int i = 0; i < 3; ++i)
 	{
-		COORD p = { pos.X, pos.Y + 1 + i };
+		COORD p = { pos.X, SHORT(pos.Y + 1 + i) };
 		FillConsoleOutputAttribute(hOut, menu_item_attrib[menu_active == MENU_LFO && menu_item[MENU_LFO] == i], 18, p, &written);
 	}
 
@@ -1018,7 +1014,7 @@ void MenuOSC(HANDLE hOut, WORD key, DWORD modifiers)
 
 	for (int i = 0; i < 7; ++i)
 	{
-		COORD p = { pos.X, pos.Y + 1 + i };
+		COORD p = { pos.X, SHORT(pos.Y + 1 + i) };
 		FillConsoleOutputAttribute(hOut, menu_item_attrib[menu_active == MENU_OSC && menu_item[MENU_OSC] == i], 18, p, &written);
 	}
 
@@ -1132,7 +1128,7 @@ void MenuFLT(HANDLE hOut, WORD key, DWORD modifiers)
 
 	for (int i = 0; i < 9; ++i)
 	{
-		COORD p = { pos.X, pos.Y + 1 + i };
+		COORD p = { pos.X, SHORT(pos.Y + 1 + i) };
 		FillConsoleOutputAttribute(hOut, menu_item_attrib[menu_active == MENU_FLT && menu_item[MENU_FLT] == i], 18, p, &written);
 	}
 
@@ -1222,7 +1218,7 @@ void MenuVOL(HANDLE hOut, WORD key, DWORD modifiers)
 
 	for (int i = 0; i < 4; ++i)
 	{
-		COORD p = { pos.X, pos.Y + 1 + i };
+		COORD p = { pos.X, SHORT(pos.Y + 1 + i) };
 		FillConsoleOutputAttribute(hOut, menu_item_attrib[menu_active == MENU_VOL && menu_item[MENU_VOL] == i], 18, p, &written);
 	}
 
@@ -1261,7 +1257,6 @@ static void DisableEffect(int index)
 
 void MenuFX(HANDLE hOut, WORD key, DWORD modifiers)
 {
-	char buf[64];
 	COORD pos = { 61, 18 };
 	DWORD written;
 
@@ -1318,8 +1313,6 @@ void Clear(HANDLE hOut)
 
 void main(int argc, char **argv)
 {
-	INPUT_RECORD keyin;
-	DWORD r, buflen;
 	int k;
 	HANDLE hIn = GetStdHandle(STD_INPUT_HANDLE);
 	HANDLE hOut = GetStdHandle(STD_OUTPUT_HANDLE);
@@ -1363,19 +1356,26 @@ void main(int argc, char **argv)
 	SetConsoleMode(hIn, 0);
 
 	// 10ms update period
-	BASS_SetConfig(BASS_CONFIG_UPDATEPERIOD, 10);
+	const int STREAM_UPDATE_PERIOD = 10;
+	BASS_SetConfig(BASS_CONFIG_UPDATEPERIOD, STREAM_UPDATE_PERIOD);
 
-	// setup output - get latency
-	//if (!BASS_Init(-1, 44100, BASS_DEVICE_LATENCY, 0, NULL))
+	// initialize BASS sound library
 	if (!BASS_Init(-1, 48000, BASS_DEVICE_LATENCY, 0, NULL))
 		Error("Can't initialize device");
 
+	// get device info
 	BASS_GetInfo(&info);
+	DebugPrint("device latency: %dms\n", info.latency);
+	DebugPrint("device minbuf: %dms\n", info.minbuf);
+	DebugPrint("ds version: %d (effects %s)\n", info.dsver, info.dsver < 8 ? "disabled" : "enabled");
+
 	// default buffer size = update period + 'minbuf' + 1ms extra margin
-	BASS_SetConfig(BASS_CONFIG_BUFFER, 10 + info.minbuf + 1);
-	buflen = BASS_GetConfig(BASS_CONFIG_BUFFER);
+	BASS_SetConfig(BASS_CONFIG_BUFFER, STREAM_UPDATE_PERIOD + info.minbuf + 1);
+	DebugPrint("using a %dms buffer\r", BASS_GetConfig(BASS_CONFIG_BUFFER));
+
 	// if the device's output rate is unknown default to 44100 Hz
 	if (!info.freq) info.freq = 44100;
+
 	// create a stream, stereo so that effects sound nice
 	stream = BASS_StreamCreate(info.freq, 2, 0, (STREAMPROC*)WriteStream, 0);
 
@@ -1384,60 +1384,50 @@ void main(int argc, char **argv)
 	InitPoly(poly5, 5, 2, 0x1F, 1);
 	InitPoly(poly17, 17, 5, 0x1FFFF, 0);
 
-	// compute phase advance per sample per key
+	// compute frequency for each note key
 	for (k = 0; k < KEYS; ++k)
 	{
-		keyboard_frequency[k] = pow(2.0, (k + 3) / 12.0) * 220.0;	// middle C = 261.626Hz; A above middle C = 440Hz
-		//keyboard_frequency[k] = pow(2.0, k / 12.0) * 256.0f;		// middle C = 256Hz
+		keyboard_frequency[k] = powf(2.0F, (k + 3) / 12.0f) * 220.0f;	// middle C = 261.626Hz; A above middle C = 440Hz
+		//keyboard_frequency[k] = powF(2.0F, k / 12.0f) * 256.0f;		// middle C = 256Hz
 	}
-
-	DebugPrint("device latency: %dms\n", info.latency);
-	DebugPrint("device minbuf: %dms\n", info.minbuf);
-	DebugPrint("ds version: %d (effects %s)\n", info.dsver, info.dsver < 8 ? "disabled" : "enabled");
 
 	// show the note keys
 	for (k = 0; k < KEYS; ++k)
 	{
-		char buf[] = { keys[k], '\0' };
-		COORD pos = { key_pos.X + k, key_pos.Y };
+		char buf[] = { char(keys[k]), '\0' };
+		COORD pos = { SHORT(key_pos.X + k), SHORT(key_pos.Y) };
 		WORD attrib = FOREGROUND_BLUE | FOREGROUND_GREEN | FOREGROUND_RED;
 		DWORD written;
 		WriteConsoleOutputAttribute(hOut, &attrib, 1, pos, &written);
 		WriteConsoleOutputCharacter(hOut, buf, 1, pos, &written);
 	}
 
+	// show output scale and key octave
 	PrintOutputScale(hOut);
 	PrintKeyOctave(hOut);
 
-	// initialize all menus
+	// show all menus
 	for (int i = 0; i < MENU_COUNT - (info.dsver < 8); ++i)
 		menufunc[i](hOut, 0, 0);
 
-	/*
-	printf(
-		"press -/+ to de/increase the buffer\n"
-		"press [/] to de/increase the octave\n"
-		"press ,/. to switch the waveform\n"
-		"press escape to quit\n\n");
-	if (info.dsver >= 8) // DX8 effects available
-		printf("press F1-F9 to toggle effects\n\n");
-	printf("using a %dms buffer\r", buflen);
-	*/
-
+	// start playing the audio stream
 	BASS_ChannelPlay(stream, FALSE);
 
+	// previous volume envelope state for each key
 	EnvelopeState::State vol_env_display[KEYS] = { EnvelopeState::OFF };
 
 	while (running)
 	{
-		// if there are any pending input events
+		// if there are any pending input events...
 		DWORD numEvents = 0;
 		while (GetNumberOfConsoleInputEvents(hIn, &numEvents) && numEvents > 0)
 		{
+			// get the next input event
 			INPUT_RECORD keyin;
 			ReadConsoleInput(hIn, &keyin, 1, &numEvents);
 			if (keyin.EventType == KEY_EVENT)
 			{
+				// handle interface keys
 				if (keyin.Event.KeyEvent.bKeyDown)
 				{
 					WORD code = keyin.Event.KeyEvent.wVirtualKeyCode;
@@ -1500,13 +1490,15 @@ void main(int argc, char **argv)
 					}
 				}
 
+				// handle note keys
 				for (k = 0; k < KEYS; k++)
 				{
 					if (keyin.Event.KeyEvent.wVirtualKeyCode == keys[k])
 					{
-						if (flt_env_state[k].gate != bool(keyin.Event.KeyEvent.bKeyDown))
+						bool gate = (keyin.Event.KeyEvent.bKeyDown != 0);
+						if (flt_env_state[k].gate != gate)
 						{
-							flt_env_state[k].gate = bool(keyin.Event.KeyEvent.bKeyDown);
+							flt_env_state[k].gate = gate;
 
 							if (flt_env_state[k].gate)
 							{
@@ -1517,9 +1509,9 @@ void main(int argc, char **argv)
 								flt_env_state[k].state = EnvelopeState::RELEASE;
 							}
 						}
-						if (vol_env_state[k].gate != bool(keyin.Event.KeyEvent.bKeyDown))
+						if (vol_env_state[k].gate != gate)
 						{
-							vol_env_state[k].gate = bool(keyin.Event.KeyEvent.bKeyDown);
+							vol_env_state[k].gate = gate;
 
 							if (vol_env_state[k].gate)
 							{
@@ -1547,32 +1539,51 @@ void main(int argc, char **argv)
 			}
 		}
 
-		// compute power spectrum
-		float fft[8192];
-		BASS_ChannelGetData(stream, fft, BASS_DATA_FFT16384); // get the FFT data
-		float const step = powf(2, 1.0f / 12.0f);
-		float freq = 0.5f * keyboard_frequency[0] * keyboard_timescale * ARRAY_SIZE(fft) * 2.0f / info.freq / sqrtf(step);
-		int b0 = int(freq);
-		float spectrum[SPECTRUM_WIDTH] = { 0 };
+		// SEMITONE POWER SPECTRUM
+		// horizontal axis shows semitone frequency bands
+		// vertical axis shows logarithmic power
+
+		// get complex FFT data
+#define FREQUENCY_BINS 4096
+		float fft[FREQUENCY_BINS * 2][2];
+		BASS_ChannelGetData(stream, &fft[0][0], BASS_DATA_FFT8192|BASS_DATA_FFT_COMPLEX);
+
+		// center frequency of the zeroth semitone band
+		// (one octave down from the lowest key)
+		float const freq_min = keyboard_frequency[0] * keyboard_timescale * 0.5f;
+
+		// get the lower frequency bin for the zeroth semitone band
+		// (half a semitone down from the center frequency)
+		float const semitone = powf(2.0f, 1.0f / 12.0f);
+		float freq = freq_min * FREQUENCY_BINS * 2.0f / info.freq / sqrtf(semitone);
+		int b0 = Max(int(freq), 0);
+
+		// get power in each semitone band
+		static float spectrum[SPECTRUM_WIDTH] = { 0 };
 		for (int x = 0; x < SPECTRUM_WIDTH; ++x)
 		{
-			freq *= step;
-			int const b1 = Min(int(freq), int(ARRAY_SIZE(fft)));
-			float peak = 0.0f;
+			// get upper frequency bin for the current semitone
+			freq *= semitone;
+			int const b1 = Min(int(freq), FREQUENCY_BINS);
+
+			// ensure there's at least one bin
+			// (or quit upon reaching the last bin)
 			if (b0 == b1)
 			{
-				if (b1 == ARRAY_SIZE(fft))
+				if (b1 == FREQUENCY_BINS)
 					break;
-				else
-					--b0;
+				--b0;
 			}
-			float scale = 16.0f * 8192.0f / (b1 - b0);
+
+			// sum power across the semitone band
+			float scale = FREQUENCY_BINS / (b1 - b0);
+			float value = 0.0f;
 			for (; b0 < b1; ++b0)
-				peak += fft[b0] * fft[b0];
-			spectrum[x] = scale * peak;
+				value += fft[b0][0] * fft[b0][0] + fft[b0][1] * fft[b0][1];
+			spectrum[x] = scale * value;
 		}
 
-		// draw spectrum
+		// plot log-log spectrum
 		CHAR_INFO buf[SPECTRUM_HEIGHT][SPECTRUM_WIDTH];
 		COORD const pos = { 0, 0 };
 		COORD const size = { SPECTRUM_WIDTH, SPECTRUM_HEIGHT };
@@ -1595,18 +1606,19 @@ void main(int argc, char **argv)
 		}
 		WriteConsoleOutput(hOut, &buf[0][0], size, pos, &region);
 
-		// update volume envelope display
+		// update note key volume envelope display
 		for (k = 0; k < KEYS; k++)
 		{
 			if (vol_env_display[k] != vol_env_state[k].state)
 			{
 				vol_env_display[k] = vol_env_state[k].state;
-				COORD pos = { key_pos.X + k, key_pos.Y };
+				COORD pos = { SHORT(key_pos.X + k), key_pos.Y };
 				DWORD written;
 				WriteConsoleOutputAttribute(hOut, &env_attrib[vol_env_display[k]], 1, pos, &written);
 			}
 		}
 
+		// sleep for 1/60th of second
 		Sleep(16);
 	}
 
