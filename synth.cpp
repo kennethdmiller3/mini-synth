@@ -921,7 +921,7 @@ DWORD CALLBACK WriteStream(HSTREAM handle, short *buffer, DWORD length, void *us
 		osc_config.frequency = powf(2.0f, osc_config.frequency_base + osc_config.frequency_lfo * lfo) * wave_adjust_frequency[osc_config.wavetype];
 
 		// LFO amplitude modulation
-		osc_config.amplitude = osc_config.amplitude_base * powf(2.0f, osc_config.amplitude_lfo * lfo);
+		osc_config.amplitude = osc_config.amplitude_base + osc_config.amplitude_lfo * lfo;
 
 		// accumulated sample value
 		float sample = 0.0f;
@@ -1552,15 +1552,15 @@ void UpdateOscillatorWaveformDisplay(HANDLE hOut)
 {
 	// show the oscillator wave shape
 	// (using the lowest key frequency as reference)
-	CHAR_INFO const fill = { 0, BACKGROUND_BLUE };
+	WORD const positive = BACKGROUND_BLUE, negative = BACKGROUND_RED;
 	CHAR_INFO const plot[2] = {
-		{ 223, FOREGROUND_RED | FOREGROUND_GREEN | FOREGROUND_BLUE | BACKGROUND_BLUE },
+		{ 223, FOREGROUND_RED | FOREGROUND_GREEN | FOREGROUND_BLUE },
 		{ 220, FOREGROUND_RED | FOREGROUND_GREEN | FOREGROUND_BLUE }
 	};
-	CHAR_INFO buf[21][80] = { 0 };
+	CHAR_INFO buf[20][80] = { 0 };
 	COORD const pos = { 0, 0 };
-	COORD const size = { 80, 21 };
-	SMALL_RECT region = { 0, 50 - 21, 79, 49 };
+	COORD const size = { 80, 20 };
+	SMALL_RECT region = { 0, 50 - 20, 79, 49 };
 
 	// local copy of oscillator config
 	NoteOscillatorConfig config = osc_config;
@@ -1575,7 +1575,7 @@ void UpdateOscillatorWaveformDisplay(HANDLE hOut)
 	config.frequency = powf(2.0f, config.frequency_base + config.frequency_lfo * lfo) * wave_adjust_frequency[config.wavetype];
 
 	// LFO amplitude modulation
-	config.amplitude = config.amplitude_base * powf(2.0f, config.amplitude_lfo * lfo);
+	config.amplitude = config.amplitude_base + config.amplitude_lfo * lfo;
 
 	// phase step for plot
 	float const step = Min(float(wave_loop_cycle[config.wavetype]) / 80.0f, 1.0f);
@@ -1589,14 +1589,40 @@ void UpdateOscillatorWaveformDisplay(HANDLE hOut)
 	for (int x = 0; x < 80; ++x)
 	{
 		float const osc = config.amplitude * oscillator[config.wavetype](config, state, delta);
-		int grid_y = int(20 - osc * 20);
-		int y = grid_y >> 1;
-		if (y < 0)
-			y = -1;
-		else if (y < 21)
-			buf[y][x] = plot[grid_y & 1];
-		for (y += 1; y < 21; ++y)
-			buf[y][x] = fill;
+		int grid_y = int(-19.5f * osc);
+		if (osc > 0.0f)
+		{
+			--grid_y;
+			int y = 10 + (grid_y >> 1);
+			if (y >= 0)
+			{
+				buf[y][x] = plot[grid_y & 1];
+				y += grid_y & 1;
+			}
+			else
+			{
+				y = 0;
+			}
+
+			for (int fill = y; fill < 10; ++fill)
+				buf[fill][x].Attributes |= positive;
+		}
+		else
+		{
+			int y = 10 + (grid_y >> 1);
+			if (y < 20)
+			{
+				buf[y][x] = plot[grid_y & 1];
+				--y;
+				y += grid_y & 1;
+			}
+			else
+			{
+				y = 19;
+			}
+			for (int fill = y; fill >= 10; --fill)
+				buf[fill][x].Attributes |= negative;
+		}
 		state.phase += step;
 		if (state.phase >= 1.0f)
 		{
