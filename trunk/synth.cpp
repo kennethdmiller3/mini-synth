@@ -1,6 +1,6 @@
 /*
 MINI VIRTUAL ANALOG SYNTHESIZER
-Derived from BASS simple synth demo
+Copyright 2014 Kenneth D. Miller III
 */
 
 #include <windows.h>
@@ -78,6 +78,7 @@ void Error(char const *text)
 
 #define ARRAY_SIZE(x) (sizeof(x)/sizeof(x[0]))
 
+// some useful template functions
 template<typename T> static inline T Squared(T x)
 {
 	return x * x;
@@ -99,21 +100,7 @@ template<typename T> static inline T Max(T a, T b)
 	return a > b ? a : b;
 }
 
-static inline float Saturate(float x)
-{
-	return 0.5f * (fabsf(x + 1.0f) - fabsf(x - 1.0f));
-}
-
-static inline float Fmod1(float x)
-{
-	return x - floorf(x);
-}
-
-static inline float FastTanhUnclamped(float x)
-{
-	return x * (27 + x * x) / (27 + 9 * x * x);
-}
-
+// fast approximation of tanh()
 static inline float FastTanh(float x)
 {
 	if (x < -3)
@@ -124,6 +111,7 @@ static inline float FastTanh(float x)
 }
 
 #if ANTIALIAS == ANTIALIAS_POLYBLEP
+// width of bandlimited step relative to the sample period
 static const float POLYBLEP_WIDTH = 1.5f;
 
 // Valimaki/Huovilainen PolyBLEP
@@ -140,6 +128,7 @@ static inline float PolyBLEP(float t, float w)
 		return t * t + t + t + 1;
 }
 
+// width of integrated bandlimited step relative to the sample period
 static const float INTEGRATED_POLYBLEP_WIDTH = 1.5f;
 
 // symbolically-integrated PolyBLEP
@@ -159,33 +148,18 @@ static inline float IntegratedPolyBLEP(float t, float w)
 }
 #endif
 
+// window title
 char const title_text[] = ">>> MINI VIRTUAL ANALOG SYNTHESIZER";
-COORD const title_pos = { 0, 0 };
 
+// note key display
 WORD const keys[] = {
 	'Z', 'S', 'X', 'D', 'C', 'V', 'G', 'B', 'H', 'N', 'J', 'M',
 	'Q', '2', 'W', '3', 'E', 'R', '5', 'T', '6', 'Y', '7', 'U',
 };
 COORD const key_pos = { 12, SPECTRUM_HEIGHT };
-//{
-//	{ 1, 5 }, { 2, 4 }, { 3, 5 }, { 4, 4 }, { 5, 5 }, { 7, 5 }, { 8, 4 }, { 9, 5 }, { 10, 4 }, { 11, 5 }, { 12, 4 }, { 13, 5 },
-//	{ 1, 2 }, { 2, 1 }, { 3, 2 }, { 4, 1 }, { 5, 2 }, { 7, 2 }, { 8, 1 }, { 9, 2 }, { 10, 1 }, { 11, 2 }, { 12, 1 }, { 13, 2 },
-//	{ 1, 2 }, { 2, 1 }, { 3, 2 }, { 4, 1 }, { 5, 2 }, { 7, 2 }, { 8, 1 }, { 9, 2 }, { 10, 1 }, { 11, 2 }, { 12, 1 }, { 13, 2 },
-//	{ 15, 2 }, { 16, 1 }, { 17, 2 }, { 18, 1 }, { 19, 2 }, { 21, 2 }, { 22, 1 }, { 23, 2 }, { 24, 1 }, { 25, 2 }, { 26, 1 }, { 27, 2 },
-//};
 static size_t const KEYS = ARRAY_SIZE(keys);
 
-enum MenuMode
-{
-	MENU_LFO,
-	MENU_OSC,
-	MENU_FLT,
-	MENU_VOL,
-	MENU_FX,
-
-	MENU_COUNT
-};
-
+// menu attributes
 WORD const menu_title_attrib[] =
 {
 	FOREGROUND_RED | FOREGROUND_GREEN | FOREGROUND_BLUE | BACKGROUND_BLUE,
@@ -195,6 +169,18 @@ WORD const menu_item_attrib[] =
 {
 	FOREGROUND_RED | FOREGROUND_GREEN | FOREGROUND_BLUE,
 	FOREGROUND_RED | FOREGROUND_GREEN | FOREGROUND_INTENSITY | BACKGROUND_BLUE,
+};
+
+// menu modes
+enum MenuMode
+{
+	MENU_LFO,
+	MENU_OSC,
+	MENU_FLT,
+	MENU_VOL,
+	MENU_FX,
+
+	MENU_COUNT
 };
 
 // selected menu
@@ -817,7 +803,7 @@ float FilterState::Apply(float input)
 	for (int i = 0; i < FILTER_OVERSAMPLE; ++i)
 #endif
 	{
-		// feedback
+		// feedback with nonlinear saturation
 		float const comp = 0.5f;
 		float const in = input - feedback * (FastTanh(y[4]) - comp * input);
 
@@ -1550,6 +1536,9 @@ void UpdateKeyVolumeEnvelopeDisplay(HANDLE hOut, EnvelopeState::State vol_env_di
 
 void UpdateOscillatorWaveformDisplay(HANDLE hOut)
 {
+#define WAVEFORM_WIDTH 80
+#define WAVEFORM_HEIGHT 8
+#define WAVEFORM_MIDLINE 4
 	// show the oscillator wave shape
 	// (using the lowest key frequency as reference)
 	WORD const positive = BACKGROUND_BLUE, negative = BACKGROUND_RED;
@@ -1557,10 +1546,10 @@ void UpdateOscillatorWaveformDisplay(HANDLE hOut)
 		{ 223, FOREGROUND_RED | FOREGROUND_GREEN | FOREGROUND_BLUE },
 		{ 220, FOREGROUND_RED | FOREGROUND_GREEN | FOREGROUND_BLUE }
 	};
-	CHAR_INFO buf[20][80] = { 0 };
+	CHAR_INFO buf[WAVEFORM_HEIGHT][WAVEFORM_WIDTH] = { 0 };
 	COORD const pos = { 0, 0 };
-	COORD const size = { 80, 20 };
-	SMALL_RECT region = { 0, 50 - 20, 79, 49 };
+	COORD const size = { WAVEFORM_WIDTH, WAVEFORM_HEIGHT };
+	SMALL_RECT region = { 0, 50 - WAVEFORM_HEIGHT, WAVEFORM_WIDTH - 1, 49 };
 
 	// local copy of oscillator config
 	NoteOscillatorConfig config = osc_config;
@@ -1578,7 +1567,7 @@ void UpdateOscillatorWaveformDisplay(HANDLE hOut)
 	config.amplitude = config.amplitude_base + config.amplitude_lfo * lfo;
 
 	// phase step for plot
-	float const step = Min(float(wave_loop_cycle[config.wavetype]) / 80.0f, 1.0f);
+	float const step = Min(float(wave_loop_cycle[config.wavetype]) / float(WAVEFORM_WIDTH), 1.0f);
 
 	// local copy of oscillator state
 	OscillatorState state = { wave_start_value[config.wavetype], 0.5f * step, 0 };
@@ -1586,14 +1575,14 @@ void UpdateOscillatorWaveformDisplay(HANDLE hOut)
 	// delta time as seen by the oscillator
 	float const delta = keyboard_frequency[0] * keyboard_timescale * config.frequency * wave_adjust_frequency[config.wavetype] / info.freq;
 
-	for (int x = 0; x < 80; ++x)
+	for (int x = 0; x < WAVEFORM_WIDTH; ++x)
 	{
 		float const osc = config.amplitude * oscillator[config.wavetype](config, state, delta);
-		int grid_y = int(-19.5f * osc);
+		int grid_y = int(-(WAVEFORM_HEIGHT - 0.5f) * osc);
 		if (osc > 0.0f)
 		{
 			--grid_y;
-			int y = 10 + (grid_y >> 1);
+			int y = WAVEFORM_MIDLINE + (grid_y >> 1);
 			if (y >= 0)
 			{
 				buf[y][x] = plot[grid_y & 1];
@@ -1604,13 +1593,13 @@ void UpdateOscillatorWaveformDisplay(HANDLE hOut)
 				y = 0;
 			}
 
-			for (int fill = y; fill < 10; ++fill)
+			for (int fill = y; fill < WAVEFORM_MIDLINE; ++fill)
 				buf[fill][x].Attributes |= positive;
 		}
 		else
 		{
-			int y = 10 + (grid_y >> 1);
-			if (y < 20)
+			int y = WAVEFORM_MIDLINE + (grid_y >> 1);
+			if (y < WAVEFORM_HEIGHT)
 			{
 				buf[y][x] = plot[grid_y & 1];
 				--y;
@@ -1618,9 +1607,9 @@ void UpdateOscillatorWaveformDisplay(HANDLE hOut)
 			}
 			else
 			{
-				y = 19;
+				y = WAVEFORM_HEIGHT - 1;
 			}
-			for (int fill = y; fill >= 10; --fill)
+			for (int fill = y; fill >= WAVEFORM_MIDLINE; --fill)
 				buf[fill][x].Attributes |= negative;
 		}
 		state.phase += step;
