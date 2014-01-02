@@ -24,6 +24,7 @@ CHAR_INFO const bar_full = { 0, BACKGROUND_GREEN };
 CHAR_INFO const bar_top = { 223, BACKGROUND_GREEN | FOREGROUND_RED | FOREGROUND_GREEN | FOREGROUND_BLUE };
 CHAR_INFO const bar_bottom = { 220, BACKGROUND_BLUE | FOREGROUND_RED | FOREGROUND_GREEN | FOREGROUND_BLUE };
 CHAR_INFO const bar_empty = { 0, BACKGROUND_BLUE };
+CHAR_INFO const bar_invalid = { 0, BACKGROUND_RED };
 
 // debug output
 int DebugPrint(const char *format, ...)
@@ -414,27 +415,14 @@ float OscillatorPulse(float amplitude, float phase, int loops, float param)
 // - sum k=1..infinity sin(k*2*pi*phase)/n
 float OscillatorSawtooth(float amplitude, float phase, int loops, float param)
 {
-#if 1
 	return amplitude * (1.0f - 2.0f * phase);
-#else
-	if (phase < 0.5f)
-		return amplitude * 2.0f * phase;
-	else
-		return amplitude * 2.0f * (phase - 1.0f);
-#endif
 }
 
 // triangle oscillator
 // - sum k=0..infinity (-1)**k sin((2*k+1)*2*pi*phase)/(2*k+1)**2
 float OscillatorTriangle(float amplitude, float phase, int loops, float param)
 {
-	if (phase < 0.25f)
-		return amplitude * 4.0f * phase;
-	else if (phase < 0.75f)
-		return amplitude * 4.0f * (0.5f - phase);
-	else
-		return amplitude * 4.0f * (phase - 1.0f);
-	//return amplitude * (4.0f * fabsf(phase + 0.25f - roundf(phase + 0.25f)) - 1.0f);
+	return amplitude * (fabsf(2 - fabsf(4 * phase - 1)) - 1);
 }
 
 // poly4 oscillator
@@ -513,12 +501,16 @@ OscillatorFunc const oscillator[WAVE_COUNT] =
 // update low-frequency oscillator
 float LFOState::Update(LFOConfig const &config, float const step)
 {
+	float const delta = config.frequency * step;
+	if (delta >= 0.5f)
+		return 0.0f;	// above nyquist frequency
+
 	// get oscillator value
 	float const value = oscillator[config.wavetype](1.0f, phase, loops, config.waveparam);
 
 	// accumulate oscillator phase
-	phase += config.frequency * step;
-	while (phase >= 1.0f)
+	phase += delta;
+	if (phase >= 1.0f)
 	{
 		phase -= 1.0f;
 		if (++loops >= wave_loop_cycle[config.wavetype])
@@ -531,16 +523,26 @@ float LFOState::Update(LFOConfig const &config, float const step)
 // update oscillator
 float OscillatorState::Update(OscillatorConfig const &config, float const step)
 {
+	float const delta = config.frequency * step;
+	if (delta >= 0.5f)
+		return 0.0f;	// above nyquist frequency
+
 	// get oscillator value
 	float const value = oscillator[config.wavetype](config.amplitude, phase, loops, config.waveparam);
 
 	// accumulate oscillator phase
-	phase += config.frequency * step;
-	while (phase >= 1.0f)
+	phase += delta;
+	if (phase >= 1.0f)
 	{
 		phase -= 1.0f;
 		if (++loops >= wave_loop_cycle[config.wavetype])
 			loops = 0;
+	}
+	else if (phase < 0.0f)
+	{
+		phase += 1.0f;
+		if (--loops < 0)
+			loops = wave_loop_cycle[config.wavetype] - 1;
 	}
 
 	return value;
@@ -1560,6 +1562,7 @@ void main(int argc, char **argv)
 
 		// get power in each semitone band
 		static float spectrum[SPECTRUM_WIDTH] = { 0 };
+		int xlimit = SPECTRUM_WIDTH;
 		for (int x = 0; x < SPECTRUM_WIDTH; ++x)
 		{
 			// get upper frequency bin for the current semitone
@@ -1571,7 +1574,10 @@ void main(int argc, char **argv)
 			if (b0 == b1)
 			{
 				if (b1 == FREQUENCY_BINS)
+				{
+					xlimit = x;
 					break;
+				}
 				--b0;
 			}
 
@@ -1584,14 +1590,16 @@ void main(int argc, char **argv)
 		}
 
 		// plot log-log spectrum
+		// each grid cell is one semitone wide and 6 dB high
 		CHAR_INFO buf[SPECTRUM_HEIGHT][SPECTRUM_WIDTH];
 		COORD const pos = { 0, 0 };
 		COORD const size = { SPECTRUM_WIDTH, SPECTRUM_HEIGHT };
-		SMALL_RECT region = { pos.X, pos.Y, pos.X + size.X - 1, pos.Y + size.Y - 1 };
+		SMALL_RECT region = { 0, 0, 79, 49 };
 		float threshold = 1.0f;
 		for (int y = 0; y < SPECTRUM_HEIGHT; ++y)
 		{
-			for (int x = 0; x < SPECTRUM_WIDTH; ++x)
+			int x;
+			for (x = 0; x < xlimit; ++x)
 			{
 				if (spectrum[x] < threshold)
 					buf[y][x] = bar_empty;
@@ -1601,6 +1609,10 @@ void main(int argc, char **argv)
 					buf[y][x] = bar_top;
 				else
 					buf[y][x] = bar_full;
+			}
+			for (; x < SPECTRUM_WIDTH; ++x)
+			{
+				buf[y][x] = bar_invalid;
 			}
 			threshold *= 0.25f;
 		}
