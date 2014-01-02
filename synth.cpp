@@ -14,14 +14,9 @@
 BASS_INFO info;
 HSTREAM stream; // the stream
 
-#define FILTER_HUOVILAINEN -2
-#define FILTER_STILSON -1
-#define FILTER_VARIATION_0 0
-#define FILTER_VARIATION_1 1
-#define FILTER_VARIATION_2 2
-#define FILTER_VARIATION_3 3
-#define FILTER_VARIATION_4 4
-#define FILTER 4
+#define FILTER_IMPROVED_MOOG 0
+#define FILTER_NONLINEAR_MOOG 1
+#define FILTER 0
 
 // debug output
 int DebugPrint(const char *format, ...)
@@ -97,8 +92,10 @@ WORD const keys[] = {
 };
 COORD const key_pos[] =
 {
-	{ 1, 5 }, { 2, 4 }, { 3, 5 }, { 4, 4 }, { 5, 5 }, { 7, 5 }, { 8, 4 }, { 9, 5 }, { 10, 4 }, { 11, 5 }, { 12, 4 }, { 13, 5 },
+//	{ 1, 5 }, { 2, 4 }, { 3, 5 }, { 4, 4 }, { 5, 5 }, { 7, 5 }, { 8, 4 }, { 9, 5 }, { 10, 4 }, { 11, 5 }, { 12, 4 }, { 13, 5 },
+//	{ 1, 2 }, { 2, 1 }, { 3, 2 }, { 4, 1 }, { 5, 2 }, { 7, 2 }, { 8, 1 }, { 9, 2 }, { 10, 1 }, { 11, 2 }, { 12, 1 }, { 13, 2 },
 	{ 1, 2 }, { 2, 1 }, { 3, 2 }, { 4, 1 }, { 5, 2 }, { 7, 2 }, { 8, 1 }, { 9, 2 }, { 10, 1 }, { 11, 2 }, { 12, 1 }, { 13, 2 },
+	{ 15, 2 }, { 16, 1 }, { 17, 2 }, { 18, 1 }, { 19, 2 }, { 21, 2 }, { 22, 1 }, { 23, 2 }, { 24, 1 }, { 25, 2 }, { 26, 1 }, { 27, 2 },
 };
 static size_t const KEYS = ARRAY_SIZE(keys);
 
@@ -205,7 +202,7 @@ struct OscillatorConfig
 	float frequency;
 	float amplitude;
 };
-OscillatorConfig osc_config = { WAVE_NOISE, 0.5f, 0.0f, 1.0f, 0.0f, 0.0f, 0.0f };
+OscillatorConfig osc_config = { WAVE_SAWTOOTH, 0.5f, 0.0f, 1.0f, 0.0f, 0.0f, 0.0f };
 // TO DO: multiple oscillators
 // TO DO: hard sync
 // TO DO: keyboard follow dial?
@@ -230,7 +227,7 @@ struct EnvelopeConfig
 	float sustain_level;
 	float release_rate;
 };
-EnvelopeConfig env_config = { 256.0f, 4.0f, 0.0f, 256.0f };
+EnvelopeConfig env_config = { 256.0f, 16.0f, 1.0f, 256.0f };
 
 // envelope generator state
 struct EnvelopeState
@@ -292,7 +289,6 @@ const char * const filter_name[FILTER_COUNT] =
 	"Band-Pass", "Notch"
 };
 
-
 // resonant lowpass filter
 FilterMode flt_enable = FILTER_NONE;
 float flt_cutoff = 0.0f;
@@ -303,18 +299,17 @@ float flt_resonance = 0.0f;
 // filter state
 struct FilterState
 {
-#if FILTER == FILTER_STILSON
-	float output;
-	float state[4];
-	float p;
-	float q;
-#elif FILTER == FILTER_HUOVILAINEN
+#if FILTER == FILTER_NONLINEAR_MOOG
+
 #define FILTER_OVERSAMPLE 2
+
 	float feedback;
 	float tune;
 	float ytan[4];
 	float y[5];
+
 #else
+
 #define FILTER_OVERSAMPLE 2
 
 	// feedback coefficient
@@ -334,6 +329,7 @@ struct FilterState
 	// output values from each stage
 	// (y[0] is input to the first stage)
 	float y[5];
+
 #endif
 
 	void Clear(void);
@@ -562,10 +558,7 @@ float EnvelopeState::Update(EnvelopeConfig const &config, float const step)
 
 void FilterState::Clear()
 {
-#if FILTER == FILTER_STILSON
-	output = 0.0f;
-	memset(state, 0, sizeof(state));
-#elif FILTER == FILTER_HUOVILAINEN
+#if FILTER == FILTER_NONLINEAR_MOOG
 	feedback = 0.0f;
 	tune = 0.0f;
 	memset(ytan, 0, sizeof(ytan));
@@ -577,121 +570,10 @@ void FilterState::Clear()
 #endif
 }
 
-#if FILTER == FILTER_STILSON
-static float const gaintable[199] = {
-	0.999969f, 0.990082f, 0.980347f, 0.970764f, 0.961304f, 0.951996f, 0.94281f, 0.933777f, 0.924866f, 0.916077f,
-	0.90741f, 0.898865f, 0.890442f, 0.882141f, 0.873962f, 0.865906f, 0.857941f, 0.850067f, 0.842346f, 0.834686f,
-	0.827148f, 0.819733f, 0.812378f, 0.805145f, 0.798004f, 0.790955f, 0.783997f, 0.77713f, 0.770355f, 0.763672f,
-	0.75708f, 0.75058f, 0.744141f, 0.737793f, 0.731537f, 0.725342f, 0.719238f, 0.713196f, 0.707245f, 0.701355f,
-	0.695557f, 0.689819f, 0.684174f, 0.678558f, 0.673035f, 0.667572f, 0.66217f, 0.65686f, 0.651581f, 0.646393f,
-	0.641235f, 0.636169f, 0.631134f, 0.62619f, 0.621277f, 0.616425f, 0.611633f, 0.606903f, 0.602234f, 0.597626f,
-	0.593048f, 0.588531f, 0.584045f, 0.579651f, 0.575287f, 0.570953f, 0.566681f, 0.562469f, 0.558289f, 0.554169f,
-	0.550079f, 0.546051f, 0.542053f, 0.538116f, 0.53421f, 0.530334f, 0.52652f, 0.522736f, 0.518982f, 0.515289f,
-	0.511627f, 0.507996f, 0.504425f, 0.500885f, 0.497375f, 0.493896f, 0.490448f, 0.487061f, 0.483704f, 0.480377f,
-	0.477081f, 0.473816f, 0.470581f, 0.467377f, 0.464203f, 0.46109f, 0.457977f, 0.454926f, 0.451874f, 0.448883f,
-	0.445892f, 0.442932f, 0.440033f, 0.437134f, 0.434265f, 0.431427f, 0.428619f, 0.425842f, 0.423096f, 0.42038f,
-	0.417664f, 0.415009f, 0.412354f, 0.409729f, 0.407135f, 0.404572f, 0.402008f, 0.399506f, 0.397003f, 0.394501f,
-	0.392059f, 0.389618f, 0.387207f, 0.384827f, 0.382477f, 0.380127f, 0.377808f, 0.375488f, 0.37323f, 0.370972f,
-	0.368713f, 0.366516f, 0.364319f, 0.362122f, 0.359985f, 0.357849f, 0.355713f, 0.353607f, 0.351532f, 0.349457f,
-	0.347412f, 0.345398f, 0.343384f, 0.34137f, 0.339417f, 0.337463f, 0.33551f, 0.333588f, 0.331665f, 0.329773f,
-	0.327911f, 0.32605f, 0.324188f, 0.322357f, 0.320557f, 0.318756f, 0.316986f, 0.315216f, 0.313446f, 0.311707f,
-	0.309998f, 0.308289f, 0.30658f, 0.304901f, 0.303223f, 0.301575f, 0.299927f, 0.298309f, 0.296692f, 0.295074f,
-	0.293488f, 0.291931f, 0.290375f, 0.288818f, 0.287262f, 0.285736f, 0.284241f, 0.282715f, 0.28125f, 0.279755f,
-	0.27829f, 0.276825f, 0.275391f, 0.273956f, 0.272552f, 0.271118f, 0.269745f, 0.268341f, 0.266968f, 0.265594f,
-	0.264252f, 0.262909f, 0.261566f, 0.260223f, 0.258911f, 0.257599f, 0.256317f, 0.255035f, 0.25375f
-};
-#endif
-
 void FilterState::Setup(float cutoff, float resonance)
 {
-#if FILTER == FILTER_STILSON
-	// Based on Daniel Lowenfels' implementation of Tim Stilson's Moog filter
-	// http://www.musicdsp.org/showArchiveComment.php?ArchiveID=145
-	// https://ccrma.stanford.edu/~dfl/pd/index.htm
+#if FILTER == FILTER_IMPROVED_MOOG
 
-	// compute pole parameter
-	float const fn = FILTER_OVERSAMPLE * 0.5f * info.freq;
-	float const fc = cutoff < fn ? cutoff / fn : 1.0f;
-	p = ((-0.69346f * fc - 0.59515f) * fc + 3.2937f) * fc - 1.0072f;
-	// compute feedback parameter
-	// q = resonance * ((((0.0332f * p - 0.0782f) * p + 0.1443f) * p - 0.2931f) * p + 0.449f);
-	float ix = p * 99;
-	int ixint = int(floor(ix));
-	float ixfrac = ix - ixint;
-	q = resonance * ((1.0f - ixfrac) * gaintable[ixint + 99] + ixfrac * gaintable[ixint + 100]);
-
-#elif FILTER == FILTER_VARIATION_0
-	// Based on "Moog VCF"
-	// http://www.musicdsp.org/showone.php?id=24
-
-	float const fn = 0.5f * info.freq;
-	float const fc = cutoff < fn ? cutoff / fn : 1.0f;
-	float const k = (-1.6 * fc + 3.6f) * fc - 1.0f;	//2.0f * sinf(0.5f * M_PI * fc) - 1.0f;
-	float const p = (k + 1.0f) * 0.5f;
-
-	feedback = resonance * expf((1 - p) * 1.386249f);
-	// y[n] = (x[n] + x[n-1]) * p - k * y[n-1];
-	a1 = k; b0 = p; b1 = p;
-
-#elif FILTER == FILTER_VARIATION_1
-	// Based on "Moog VCF, variation 1"
-	// http://www.musicdsp.org/showArchiveComment.php?ArchiveID=25
-	// 0 <= resonance <= 1
-
-	float const fn = FILTER_OVERSAMPLE * 0.5f * info.freq;
-	float const fc = cutoff < fn ? cutoff / fn : 1.0f;
-	float const fq = 1.0f - fc;
-	float const p = fc + 0.8f * fc * fq;
-	float const f = p + p - 1.0f;
-
-	feedback = resonance * (1.0f + fq * (0.5f + fq * (-0.5f + 2.8f * fq)));
-	// y[n] = (x[n] + x[n-1]) * p - y[n-1] * f;
-	a1 = f; b0 = p; b1 = p;
-
-#elif FILTER == FILTER_VARIATION_2
-	// Based on "Moog VCF, variation 2"
-	// http://www.musicdsp.org/showArchiveComment.php?ArchiveID=26
-	// 0 <= resonance <= 1
-
-	float const fn = FILTER_OVERSAMPLE * 0.5f * info.freq;
-	float const fc = cutoff / fn;
-	float const f = Min(fc * 1.16f, 1.0f);
-	float const ff = f * 0.769232f;	// fourth root of 0.35013 * f * f * f * f
-
-	feedback = resonance * (4.0f - 0.6f * f * f);
-	// y[n] = (1.0f - f) * y[n-1] + x[n] + 0.3f * x[n-1];
-	a1 = ff - 1.0f; b0 = ff; b1 = ff * 0.3f;
-
-#elif FILTER == FILTER_VARIATION_3
-	// Based on Moog VCF in "Digital Sound Generation - Part 2"
-	// http://courses.cs.washington.edu/courses/cse490s/11au/Readings/Digital_Sound_Generation_2.pdf
-	// 0 <= resonance <= 1
-
-	float const fn = FILTER_OVERSAMPLE * 0.5f * info.freq;
-	float const fc = cutoff < fn ? cutoff / fn : 1.0f;
-#if 1
-	float const f = fc * (1.0f + 0.03617 * fc * (4.0f - resonance) * (4.0f - resonance));
-	float const F = 1.25f * f * (1.0f + f * (-0.595f + f * 0.24f));
-	float const R = resonance * 4.0f * (1.0f + F * (0.077f + F * (-0.117f + F * -0.049f)));
-#else
-	float const f = fc * (1.0f + 0.5787f * fc * (1.0f - resonance) * (1.0f - resonance));
-	float const F = 1.25f * f * (1.0f + f * (-0.595f + f * 0.24f));
-	float const R = resonance * (1.4f + F * (0.108f + F * (-1.64 + F * -0.069)));
-#endif
-
-	feedback = R;
-#if 0
-	// input scale
-	static float prevscale;
-	float scale = in * in * 0.062f + prevscale * 0.993f;
-	scale = Saturate(scale);
-	in *= 1.0f - prevscale * (1.0f + 0.5f * prevscale);
-	prevscale = scale;
-#endif
-	// y[n] = (1.0f - F) * y[n] + F * x[n] + F * 0.3f * x[n-1]);
-	a1 = F - 1.0f; b0 = F; b1 = F * 0.3f;
-
-#elif FILTER == FILTER_VARIATION_4
 	// Based on Improved Moog Filter description
 	// http://www.music.mcgill.ca/~ich/research/misc/papers/cr1071.pdf
 
@@ -703,7 +585,8 @@ void FilterState::Setup(float cutoff, float resonance)
 	// y[n] = (g / 1.3) * x[n] + (g * 0.3 / 1.3) * x[n-1] - (g - 1) * y[n-1]
 	a1 = g - 1.0f; b0 = g * 0.769231f; b1 = b0 * 0.3f;
 
-#elif FILTER == FILTER_HUOVILAINEN
+#elif FILTER == FILTER_NONLINEAR_MOOG
+
 	// Based on Antti Huovilainen's non-linear digital implementation
 	// http://dafx04.na.infn.it/WebProc/Proc/P_061.pdf
 	// https://raw.github.com/ddiakopoulos/MoogLadders/master/Source/Huovilainen.cpp
@@ -721,21 +604,46 @@ void FilterState::Setup(float cutoff, float resonance)
 
 float FilterState::Apply(float input)
 {
-#if FILTER == FILTER_STILSON
-	// feedback
-	output = 0.25f * (input - q * output);
+#if FILTER == FILTER_IMPROVED_MOOG
 
-	// four-pole low-pass filter
-	for (int pole = 0; pole < 4; ++pole)
+#if FILTER_OVERSAMPLE > 1
+	for (int i = 0; i < FILTER_OVERSAMPLE; ++i)
+#endif
 	{
-		float temp = state[pole];
-		output = Saturate(output + p * (output - temp));
-		state[pole] = output;
-		output = Saturate(output + temp);
+		// feedback
+		float const comp = 0.5f;
+		float const in = input - feedback * (tanh(y[4]) - comp * input);
+
+		// stage 1: x1[n-1] = x1[n]; x1[n] = in;    y1[n-1] = y1[n]; y1[n] = func(y1[n-1], x1[n], x1[n-1])
+		// stage 2: x2[n-1] = x2[n]; x2[n] = y1[n]; y2[n-1] = y2[n]; y2[n] = func(y2[n-1], x2[n], x2[n-1])
+		// stage 3: x3[n-1] = x3[n]; x3[n] = y2[n]; y3[n-1] = y3[n]; y3[n] = func(y3[n-1], x3[n], x3[n-1])
+		// stage 4: x4[n-1] = x4[n]; x4[n] = y3[n]; y4[n-1] = y4[n]; y4[n] = func(y4[n-1], x4[n], x4[n-1])
+
+		// stage 1: x1[n-1] = x1[n]; x1[n] = in;    t1 = y1[n-1]; y1[n-1] = y1[n]; y1[n] = func(y1[n-1], x1[n], x1[n-1])
+		// stage 2: x2[n-1] = t1;    x2[n] = y1[n]; t2 = y2[n-1]; y2[n-1] = y2[n]; y2[n] = func(y2[n-1], x2[n], x2[n-1])
+		// stage 3: x3[n-1] = t2;    x3[n] = y2[n]; t3 = y3[n-1]; y3[n-1] = y3[n]; y3[n] = func(y3[n-1], x3[n], x3[n-1])
+		// stage 4: x4[n-1] = t3;    x4[n] = y3[n];               y4[n-1] = y4[n]; y4[n] = func(y4[n-1], x4[n], x4[n-1])
+
+		// t0 = y0[n], t1 = y1[n], t2 = y2[n], t3 = y3[n]
+		// stage 0: y0[n] = in
+		// stage 1: y1[n] = func(y1[n], y1[n], t0)
+		// stage 2: y2[n] = func(y2[n], y1[n], t1)
+		// stage 3: y3[n] = func(y3[n], y2[n], t2)
+		// stage 4: y4[n] = func(y4[n], y3[n], t3)
+
+		// four-pole low-pass filter
+		float const t[4] = { y[0], y[1], y[2], y[3] };
+		y[0] = in;
+		y[1] = b0 * y[0] + b1 * t[0] - a1 * y[1];
+		y[2] = b0 * y[1] + b1 * t[1] - a1 * y[2];
+		y[3] = b0 * y[2] + b1 * t[2] - a1 * y[3];
+		y[4] = b0 * y[3] + b1 * t[3] - a1 * y[4];
 	}
 
-	return output;
-#elif FILTER == FILTER_HUOVILAINEN
+	return y[4];
+
+#elif FILTER == FILTER_NONLINEAR_MOOG
+
 	// feedback
 	float const in = input - feedback * y[4];
 
@@ -759,49 +667,7 @@ float FilterState::Apply(float input)
 		output = 0.5f * (y[4] + last_stage);
 	}
 	return output;
-#else
-#if FILTER_OVERSAMPLE > 1
-	for (int i = 0; i < FILTER_OVERSAMPLE; ++i)
-#endif
-	{
-		// feedback
-#if FILTER == FILTER_VARIATION_4
-		float const in = input - feedback * (tanh(y[4]) - 0.5f * input);
-#else
-		float const in = input - feedback * tanh(y[4]);
-#endif
 
-		// cascade stages:
-		// stage 1: x1[n-1] = x1[n]; x1[n] = in;    y1[n-1] = y1[n]; y1[n] = func(y1[n-1], x1[n], x1[n-1])
-		// stage 2: x2[n-1] = x2[n]; x2[n] = y1[n]; y2[n-1] = y2[n]; y2[n] = func(y2[n-1], x2[n], x2[n-1])
-		// stage 3: x3[n-1] = x3[n]; x3[n] = y2[n]; y3[n-1] = y3[n]; y3[n] = func(y3[n-1], x3[n], x3[n-1])
-		// stage 4: x4[n-1] = x4[n]; x4[n] = y3[n]; y4[n-1] = y4[n]; y4[n] = func(y4[n-1], x4[n], x4[n-1])
-
-		// stage 1: x1[n-1] = x1[n]; x1[n] = in;    t1 = y1[n-1]; y1[n-1] = y1[n]; y1[n] = func(y1[n-1], x1[n], x1[n-1])
-		// stage 2: x2[n-1] = t1;    x2[n] = y1[n]; t2 = y2[n-1]; y2[n-1] = y2[n]; y2[n] = func(y2[n-1], x2[n], x2[n-1])
-		// stage 3: x3[n-1] = t2;    x3[n] = y2[n]; t3 = y3[n-1]; y3[n-1] = y3[n]; y3[n] = func(y3[n-1], x3[n], x3[n-1])
-		// stage 4: x4[n-1] = t3;    x4[n] = y3[n];               y4[n-1] = y4[n]; y4[n] = func(y4[n-1], x4[n], x4[n-1])
-
-		// t0 = y0[n], t1 = y1[n], t2 = y2[n], t3 = y3[n]
-		// stage 0: y0[n] = in
-		// stage 1: y1[n] = func(y1[n], y1[n], t0)
-		// stage 2: y2[n] = func(y2[n], y1[n], t1)
-		// stage 3: y3[n] = func(y3[n], y2[n], t2)
-		// stage 4: y4[n] = func(y4[n], y3[n], t3)
-
-		// four-pole low-pass filter
-		float const t[4] = { y[0], y[1], y[2], y[3] };
-		y[0] = in;
-		y[1] = /*Saturate*/(b0 * y[0] + b1 * t[0] - a1 * y[1]);
-		y[2] = /*Saturate*/(b0 * y[1] + b1 * t[1] - a1 * y[2]);
-		y[3] = /*Saturate*/(b0 * y[2] + b1 * t[2] - a1 * y[3]);
-		y[4] = /*Saturate*/(b0 * y[3] + b1 * t[3] - a1 * y[4]);
-
-		// soft saturation
-		//y[4] -= y[4] * y[4] * y[4] * 0.166667f;
-	}
-
-	return y[4];
 #endif
 }
 
@@ -909,7 +775,7 @@ DWORD CALLBACK WriteStream(HSTREAM handle, short *buffer, DWORD length, void *us
 				flt_state[k].Setup(cutoff, flt_resonance);
 
 				// accumulate the filtered oscillator value
-#if FILTER >= FILTER_VARIATION_0 //!= FILTER_STILSON
+#if 1
 				flt_state[k].Apply(osc_value);
 				switch (flt_enable)
 				{
@@ -918,10 +784,10 @@ DWORD CALLBACK WriteStream(HSTREAM handle, short *buffer, DWORD length, void *us
 				case FILTER_LOWPASS_2:	sample += flt_state[k].y[2]; break;
 				case FILTER_LOWPASS_3:	sample += flt_state[k].y[3]; break;
 				case FILTER_LOWPASS_4:	sample += flt_state[k].y[4]; break;
-				case FILTER_HIGHPASS_1:	sample += flt_state[k].y[0] - flt_state[k].y[1]; break;
-				case FILTER_HIGHPASS_2:	sample += flt_state[k].y[0] - flt_state[k].y[2]; break;
-				case FILTER_HIGHPASS_3:	sample += flt_state[k].y[0] - flt_state[k].y[3]; break;
-				case FILTER_HIGHPASS_4:	sample += flt_state[k].y[0] - flt_state[k].y[4]; break;
+				case FILTER_HIGHPASS_1:	sample += flt_state[k].y[0] - flt_state[k].y[4]; break;
+				case FILTER_HIGHPASS_2:	sample += flt_state[k].y[0] - flt_state[k].y[3]; break;
+				case FILTER_HIGHPASS_3:	sample += flt_state[k].y[0] - flt_state[k].y[2]; break;
+				case FILTER_HIGHPASS_4:	sample += flt_state[k].y[0] - flt_state[k].y[1]; break;
 				case FILTER_BANDPASS:	sample += 2.0f * (flt_state[k].y[4] - flt_state[k].y[2]); break;
 				case FILTER_NOTCH:		sample += 0.666667f * osc_value + (flt_state[k].y[4] - flt_state[k].y[2]); break;
 				}
@@ -949,7 +815,7 @@ DWORD CALLBACK WriteStream(HSTREAM handle, short *buffer, DWORD length, void *us
 void PrintBufferSize(HANDLE hOut, DWORD buflen)
 {
 	COORD pos = { 1, 7 };
-	PrintConsole(hOut, pos, " -   +   Buffer: %3dms", buflen);
+	PrintConsole(hOut, pos, " -   +  Buffer: %3dms", buflen);
 
 	DWORD written;
 	FillConsoleOutputAttribute(hOut, FOREGROUND_RED | FOREGROUND_GREEN | FOREGROUND_BLUE | BACKGROUND_RED, 3, pos, &written);
