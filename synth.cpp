@@ -18,13 +18,17 @@ HSTREAM stream; // the stream
 #define FILTER_NONLINEAR_MOOG 1
 #define FILTER 0
 
+#define ANTIALIAS_NONE 0
+#define ANTIALIAS_POLYBLEP 1
+#define ANTIALIAS 1
+
 #define SPECTRUM_WIDTH 80
 #define SPECTRUM_HEIGHT 8
 CHAR_INFO const bar_full = { 0, BACKGROUND_GREEN };
 CHAR_INFO const bar_top = { 223, BACKGROUND_GREEN | FOREGROUND_RED | FOREGROUND_GREEN | FOREGROUND_BLUE };
 CHAR_INFO const bar_bottom = { 220, BACKGROUND_BLUE | FOREGROUND_RED | FOREGROUND_GREEN | FOREGROUND_BLUE };
 CHAR_INFO const bar_empty = { 0, BACKGROUND_BLUE };
-CHAR_INFO const bar_invalid = { 0, BACKGROUND_RED };
+CHAR_INFO const bar_nyquist = { 0, BACKGROUND_RED };
 
 // debug output
 int DebugPrint(const char *format, ...)
@@ -68,6 +72,10 @@ void Error(char const *text)
 
 #define ARRAY_SIZE(x) (sizeof(x)/sizeof(x[0]))
 
+template<typename T> static inline T Squared(T x)
+{
+	return x * x;
+}
 template<typename T> static inline T Clamp(T x, T a, T b)
 {
 	if (x < a)
@@ -85,11 +93,75 @@ template<typename T> static inline T Max(T a, T b)
 	return a > b ? a : b;
 }
 
-static inline float Saturate(float input)
+static inline float Saturate(float x)
 {
-	return 0.5f * (fabsf(input + 1.0f) - fabsf(input - 1.0f));
+	return 0.5f * (fabsf(x + 1.0f) - fabsf(x - 1.0f));
 }
 
+static inline float Fmod1(float x)
+{
+	return x - floorf(x);
+}
+
+static inline float FastTanhUnclamped(float x)
+{
+	return x * (27 + x * x) / (27 + 9 * x * x);
+}
+
+static inline float FastTanh(float x)
+{
+	if (x < -3)
+		return -1;
+	if (x > 3)
+		return 1;
+	return x * (27 + x * x) / (27 + 9 * x * x);
+}
+
+#if ANTIALIAS == ANTIALIAS_POLYBLEP
+static const float POLYBLEP_WIDTH = 1.5f;
+
+// Valimaki/Huovilainen PolyBLEP
+static inline float PolyBLEP(float t, float dt)
+{
+	float const w = Min(dt * POLYBLEP_WIDTH, 0.5f);
+	if (t < w)
+	{
+		t /= w;
+		return t + t - t * t - 1;
+	}
+	if (t > 1 - w)
+	{
+		t -= 1;
+		t /= w;
+		return t * t + t + t + 1;
+	}
+	return 0;
+}
+
+static const float INTEGRATED_POLYBLEP_WIDTH = 1.5f;
+
+// symbolically-integrated PolyBLEP
+static inline float IntegratedPolyBLEP(float t, float dt)
+{
+	float const w = Min(dt * INTEGRATED_POLYBLEP_WIDTH, 0.5f);
+	if (t < w)
+	{
+		t /= w;
+		float const t2 = t * t;
+		float const t3 = t2 * t;
+		return (0.33333333f - t + t2 - 0.33333333f * t3) * 4 * w;
+	}
+	if (t > 1 - dt * INTEGRATED_POLYBLEP_WIDTH)
+	{
+		t -= 1;
+		t /= w;
+		float const t2 = t * t;
+		float const t3 = t2 * t;
+		return (0.33333333f + t + t2 + 0.33333333f * t3) * 4 * w;
+	}
+	return 0.0f;
+}
+#endif
 
 char const title_text[] = ">>> MINI VIRTUAL ANALOG SYNTHESIZER";
 COORD const title_pos = { 0, 0 };
@@ -130,7 +202,7 @@ WORD const menu_item_attrib[] =
 };
 
 // selected menu
-MenuMode menu_active = MENU_FLT;
+MenuMode menu_active = MENU_OSC;
 
 // selected item in each menu
 int menu_item[MENU_COUNT];
@@ -171,7 +243,7 @@ static char poly5[(1 << 5) - 1];
 static char poly17[(1 << 17) - 1];
 
 // oscillator update function
-typedef float(*OscillatorFunc)(float amplitude, float phase, int loops, float param);
+typedef float(*OscillatorFunc)(float step, float phase, int loops, float param);
 
 // low frequency oscillator configuration
 struct LFOConfig
@@ -215,7 +287,7 @@ struct OscillatorConfig
 	float frequency;
 	float amplitude;
 };
-OscillatorConfig osc_config = { WAVE_SINE, 0.5f, 0.0f, 1.0f, 0.0f, 0.0f, 0.0f };
+OscillatorConfig osc_config = { WAVE_TRIANGLE, 0.5f, 0.0f, 1.0f, 0.0f, 0.0f, 0.0f };
 // TO DO: multiple oscillators
 // TO DO: hard sync
 // TO DO: keyboard follow dial?
@@ -227,7 +299,7 @@ struct OscillatorState
 	float phase;
 	int loops;
 
-	float Update(OscillatorConfig const &config, float const step);
+	float Update(OscillatorConfig const &config, float const frequency, float const step);
 };
 OscillatorState osc_state[KEYS];
 
@@ -396,54 +468,129 @@ int const wave_loop_cycle[WAVE_COUNT] =
 };
 
 // sine oscillator
-float OscillatorSine(float amplitude, float phase, int loops, float param)
+float OscillatorSine(float step, float phase, int loops, float param)
 {
-	return amplitude * sinf(M_PI * 2.0f * phase);
+	if (step > 0.5f)
+		return 0.0f;
+	return sinf(M_PI * 2.0f * phase);
+}
+
+#ifdef BANDLIMITED_SAWTOOTH
+// bandlimited sawtooth wavetable
+float bandlimited_sawtooth[9][256];
+
+// generate wavetable
+// http://www.musicdsp.org/showArchiveComment.php?ArchiveID=17
+void InitSawtooth()
+{
+	// phase per sample step
+	float const step = 2.0f * M_PI / ARRAY_SIZE(bandlimited_sawtooth[0]);
+
+	// for each wavetable...
+	for (int w = 0; w < ARRAY_SIZE(bandlimited_sawtooth); ++w)
+	{
+		// sum the first 2**w harmonics
+		int const harmonics = 1 << w;
+		for (int n = 1; n <= harmonics; ++n)
+		{
+			// compute scale factor for this harmonic
+			// (scale higher harmonics to reduce Gibbs ringing artifacts)
+			float scale = (2.0f / M_PI) * Squared(cosf(0.5f * M_PI * float(n - 1) / harmonics)) / float(n);
+
+			// add the harmonic
+			for (int i = 0; i < ARRAY_SIZE(bandlimited_sawtooth[n]); ++i)
+			{
+				bandlimited_sawtooth[w][i] += sin(step * n * i) * scale;
+			}
+		}
+	}
+}
+#endif
+
+bool use_antialias = true;
+
+// sawtooth oscillator
+// - 2/pi sum k=1..infinity sin(k*2*pi*phase)/n
+// - smoothed transition to reduce aliasing
+float OscillatorSawtooth(float step, float phase, int loops, float param)
+{
+	if (step > 0.5f)
+		return 0.0f;
+	float value = 1.0f - 2.0f * phase;
+#if ANTIALIAS == ANTIALIAS_POLYBLEP
+	if (use_antialias)
+	{
+		value += PolyBLEP(phase, step);
+	}
+#endif
+	return value;
 }
 
 // pulse oscillator
 // - param controls pulse width
 // - pulse width 0.5 is square wave
-// - sum k=0..infinity sin((2*k+1)*2*pi*phase)/(2*k+1)
-float OscillatorPulse(float amplitude, float phase, int loops, float param)
+// - 4/pi sum k=0..infinity sin((2*k+1)*2*pi*phase)/(2*k+1)
+// - smoothed transition to reduce aliasing
+float OscillatorPulse(float step, float phase, int loops, float param)
 {
-	return phase < param ? amplitude : -amplitude;
-	//return amplitude * 2.0f * (ceilf(phase) - roundf(phase));
-}
-
-// sawtooth oscillator
-// - sum k=1..infinity sin(k*2*pi*phase)/n
-float OscillatorSawtooth(float amplitude, float phase, int loops, float param)
-{
-	return amplitude * (1.0f - 2.0f * phase);
+	if (step > 0.5f)
+		return 0.0f;
+	float value = phase < param ? 1.0f : -1.0f;
+#if ANTIALIAS == ANTIALIAS_POLYBLEP
+	if (use_antialias)
+	{
+		value += PolyBLEP(phase, step);
+		float phase_down = phase + 1 - param;
+		if (phase_down >= 1.0f)
+			phase_down -= 1.0f;
+		value -= PolyBLEP(phase_down, step);
+	}
+#endif
+	return value;
 }
 
 // triangle oscillator
-// - sum k=0..infinity (-1)**k sin((2*k+1)*2*pi*phase)/(2*k+1)**2
-float OscillatorTriangle(float amplitude, float phase, int loops, float param)
+// - 8/pi**2 sum k=0..infinity (-1)**k sin((2*k+1)*2*pi*phase)/(2*k+1)**2
+float OscillatorTriangle(float step, float phase, int loops, float param)
 {
-	return amplitude * (fabsf(2 - fabsf(4 * phase - 1)) - 1);
+	if (step > 0.5f)
+		return 0.0f;
+	float value = fabsf(2 - fabsf(4 * phase - 1)) - 1;
+#if ANTIALIAS == ANTIALIAS_POLYBLEP
+	if (use_antialias)
+	{
+		float phase_down = phase + 1.0f - 0.25f;
+		if (phase_down >= 1.0f)
+			phase_down -= 1.0f;
+		value -= IntegratedPolyBLEP(phase_down, step);
+		float phase_up = phase + 1.0f - 0.75f;
+		if (phase_up >= 1.0f)
+			phase_up -= 1.0f;
+		value += IntegratedPolyBLEP(phase_up, step);
+	}
+#endif
+	return value;
 }
 
 // poly4 oscillator
 // 4-bit linear feedback shift register noise
-float OscillatorPoly4(float amplitude, float phase, int loops, float param)
+float OscillatorPoly4(float step, float phase, int loops, float param)
 {
-	return poly4[loops] ? amplitude : -amplitude;
+	return poly4[loops] ? 1.0f : -1.0f;
 }
 
 // poly5 oscillator
 // 5-bit linear feedback shift register noise
-float OscillatorPoly5(float amplitude, float phase, int loops, float param)
+float OscillatorPoly5(float step, float phase, int loops, float param)
 {
-	return poly5[loops] ? amplitude : -amplitude;
+	return poly5[loops] ? 1.0f : -1.0f;
 }
 
 // poly17 oscillator
 // 17-bit linear feedback shift register noise
-float OscillatorPoly17(float amplitude, float phase, int loops, float param)
+float OscillatorPoly17(float step, float phase, int loops, float param)
 {
-	return poly17[loops] ? amplitude : -amplitude;
+	return poly17[loops] ? 1.0f : -1.0f;
 }
 
 namespace Random
@@ -477,19 +624,12 @@ namespace Random
 		floatint.u = 0x3f800000 | (Int() >> 9);
 		return floatint.f - 1.0f;
 	}
-
-	// random range value
-	inline float Value(float aAverage, float aVariance)
-	{
-		return (2.0f * Float() - 1.0f) * aVariance + aAverage;
-	}
 }
 
 // white noise oscillator
-float OscillatorNoise(float amplitude, float phase, int loops, float param)
+float OscillatorNoise(float step, float phase, int loops, float param)
 {
-	return Random::Value(0.0f, 2.0f * amplitude);
-	//return amplitude * 2.0f * (Random::Float() - Random::Float());
+	return Random::Float() * 2.0f - 1.0f;
 }
 
 // map wave type enumeration to oscillator function
@@ -502,11 +642,9 @@ OscillatorFunc const oscillator[WAVE_COUNT] =
 float LFOState::Update(LFOConfig const &config, float const step)
 {
 	float const delta = config.frequency * step;
-	if (delta >= 0.5f)
-		return 0.0f;	// above nyquist frequency
 
 	// get oscillator value
-	float const value = oscillator[config.wavetype](1.0f, phase, loops, config.waveparam);
+	float const value = oscillator[config.wavetype](delta, phase, loops, config.waveparam);
 
 	// accumulate oscillator phase
 	phase += delta;
@@ -521,14 +659,12 @@ float LFOState::Update(LFOConfig const &config, float const step)
 }
 
 // update oscillator
-float OscillatorState::Update(OscillatorConfig const &config, float const step)
+float OscillatorState::Update(OscillatorConfig const &config, float const frequency, float const step)
 {
-	float const delta = config.frequency * step;
-	if (delta >= 0.5f)
-		return 0.0f;	// above nyquist frequency
+	float const delta = config.frequency * frequency * step;
 
 	// get oscillator value
-	float const value = oscillator[config.wavetype](config.amplitude, phase, loops, config.waveparam);
+	float const value = config.amplitude * oscillator[config.wavetype](delta, phase, loops, config.waveparam);
 
 	// accumulate oscillator phase
 	phase += delta;
@@ -650,7 +786,7 @@ float FilterState::Apply(float input)
 	{
 		// feedback
 		float const comp = 0.5f;
-		float const in = input - feedback * (tanh(y[4]) - comp * input);
+		float const in = input - feedback * (FastTanh(y[4]) - comp * input);
 
 		// stage 1: x1[n-1] = x1[n]; x1[n] = in;    y1[n-1] = y1[n]; y1[n] = func(y1[n-1], x1[n], x1[n-1])
 		// stage 2: x2[n-1] = x2[n]; x2[n] = y1[n]; y2[n-1] = y2[n]; y2[n] = func(y2[n-1], x2[n], x2[n-1])
@@ -693,14 +829,14 @@ float FilterState::Apply(float input)
 		float last_stage = y[4];
 
 		y[0] = in;
-		ytan[0] = tanh(y[0] * 0.8192f);
+		ytan[0] = FastTanh(y[0] * 0.8192f);
 		y[1] += tune * (ytan[0] - ytan[1]);
-		ytan[1] = tanh(y[1] * 0.8192f);
+		ytan[1] = FastTanh(y[1] * 0.8192f);
 		y[2] += tune * (ytan[1] - ytan[2]);
-		ytan[2] = tanh(y[2] * 0.8192f);
+		ytan[2] = FastTanh(y[2] * 0.8192f);
 		y[3] += tune * (ytan[2] - ytan[3]);
-		ytan[3] = tanh(y[3] * 0.8192f);
-		y[4] += tune * (ytan[3] - tanh(y[4] * 0.8192f));
+		ytan[3] = FastTanh(y[3] * 0.8192f);
+		y[4] += tune * (ytan[3] - FastTanh(y[4] * 0.8192f));
 
 		output = 0.5f * (y[4] + last_stage);
 	}
@@ -785,7 +921,7 @@ DWORD CALLBACK WriteStream(HSTREAM handle, short *buffer, DWORD length, void *us
 
 			// update oscillator
 			// (assume key follow)
-			float const osc_value = osc_state[k].Update(osc_config, step * key_freq);
+			float const osc_value = osc_state[k].Update(osc_config, key_freq, step);
 
 			float flt_value;
 			if (flt_config.mode)
@@ -831,7 +967,7 @@ DWORD CALLBACK WriteStream(HSTREAM handle, short *buffer, DWORD length, void *us
 
 		// left and right channels are the same
 		//short output = (short)Clamp(int(sample * output_scale * 32768), SHRT_MIN, SHRT_MAX);
-		short output = (short)(tanhf(sample * output_scale) * 32768);
+		short output = (short)(FastTanh(sample * output_scale) * 32768);
 		*buffer++ = output;
 		*buffer++ = output;
 	}
@@ -1315,7 +1451,6 @@ void Clear(HANDLE hOut)
 
 void main(int argc, char **argv)
 {
-	int k;
 	HANDLE hIn = GetStdHandle(STD_INPUT_HANDLE);
 	HANDLE hOut = GetStdHandle(STD_OUTPUT_HANDLE);
 	int running = 1;
@@ -1381,20 +1516,25 @@ void main(int argc, char **argv)
 	// create a stream, stereo so that effects sound nice
 	stream = BASS_StreamCreate(info.freq, 2, 0, (STREAMPROC*)WriteStream, 0);
 
+#ifdef BANDLIMITED_SAWTOOTH
+	// initialize bandlimited sawtooth tables
+	InitSawtooth();
+#endif
+
 	// initialize polynomial noise tables
 	InitPoly(poly4, 4, 1, 0xF, 0);
 	InitPoly(poly5, 5, 2, 0x1F, 1);
 	InitPoly(poly17, 17, 5, 0x1FFFF, 0);
 
 	// compute frequency for each note key
-	for (k = 0; k < KEYS; ++k)
+	for (int k = 0; k < KEYS; ++k)
 	{
 		keyboard_frequency[k] = powf(2.0F, (k + 3) / 12.0f) * 220.0f;	// middle C = 261.626Hz; A above middle C = 440Hz
 		//keyboard_frequency[k] = powF(2.0F, k / 12.0f) * 256.0f;		// middle C = 256Hz
 	}
 
 	// show the note keys
-	for (k = 0; k < KEYS; ++k)
+	for (int k = 0; k < KEYS; ++k)
 	{
 		char buf[] = { char(keys[k]), '\0' };
 		COORD pos = { SHORT(key_pos.X + k), SHORT(key_pos.Y) };
@@ -1467,6 +1607,10 @@ void main(int argc, char **argv)
 							PrintKeyOctave(hOut);
 						}
 					}
+					else if (code == VK_F12)
+					{
+						use_antialias = !use_antialias;
+					}
 					else if (code >= VK_F1 && code < VK_F1 + MENU_COUNT - (info.dsver < 8))
 					{
 						int prev_active = menu_active;
@@ -1493,7 +1637,7 @@ void main(int argc, char **argv)
 				}
 
 				// handle note keys
-				for (k = 0; k < KEYS; k++)
+				for (int k = 0; k < KEYS; k++)
 				{
 					if (keyin.Event.KeyEvent.wVirtualKeyCode == keys[k])
 					{
@@ -1582,12 +1726,15 @@ void main(int argc, char **argv)
 			}
 
 			// sum power across the semitone band
-			float scale = FREQUENCY_BINS / (b1 - b0);
+			float scale = float(FREQUENCY_BINS) / float(b1 - b0);
 			float value = 0.0f;
 			for (; b0 < b1; ++b0)
 				value += fft[b0][0] * fft[b0][0] + fft[b0][1] * fft[b0][1];
 			spectrum[x] = scale * value;
 		}
+
+		// inaudible band
+		int xinaudible = int(logf(20000 / freq_min) * 12 / logf(2)) - 1;
 
 		// plot log-log spectrum
 		// each grid cell is one semitone wide and 6 dB high
@@ -1609,17 +1756,19 @@ void main(int argc, char **argv)
 					buf[y][x] = bar_top;
 				else
 					buf[y][x] = bar_full;
+				if (x >= xinaudible)
+					buf[y][x].Attributes |= BACKGROUND_RED;
 			}
 			for (; x < SPECTRUM_WIDTH; ++x)
 			{
-				buf[y][x] = bar_invalid;
+				buf[y][x] = bar_nyquist;
 			}
 			threshold *= 0.25f;
 		}
 		WriteConsoleOutput(hOut, &buf[0][0], size, pos, &region);
 
 		// update note key volume envelope display
-		for (k = 0; k < KEYS; k++)
+		for (int k = 0; k < KEYS; k++)
 		{
 			if (vol_env_display[k] != vol_env_state[k].state)
 			{
@@ -1628,6 +1777,35 @@ void main(int argc, char **argv)
 				DWORD written;
 				WriteConsoleOutputAttribute(hOut, &env_attrib[vol_env_display[k]], 1, pos, &written);
 			}
+		}
+
+		// show the oscillator wave shape
+		// (using the lowest key frequency as reference)
+		CHAR_INFO const plot_fill = { 0, BACKGROUND_BLUE };
+		CHAR_INFO const plot_top = { 223, BACKGROUND_BLUE | FOREGROUND_RED | FOREGROUND_GREEN | FOREGROUND_BLUE };
+		CHAR_INFO const plot_bottom = { 220, FOREGROUND_RED | FOREGROUND_GREEN | FOREGROUND_BLUE };
+		CHAR_INFO plot_buf[21][80] = { 0 };
+		COORD plot_pos = { 0, 0 };
+		COORD plot_size = { 80, 21 };
+		SMALL_RECT plot_region = { 0, 50 - 21, 79, 49 };
+		float const fake_step = keyboard_frequency[0] * keyboard_timescale * osc_config.frequency / info.freq;
+		for (int x = 0; x < 80; ++x)
+		{
+			float const osc = osc_config.amplitude * oscillator[osc_config.wavetype](fake_step, (float(x) + 0.5f) / 80.0f, 0.0f, osc_config.waveparam);
+			int grid_y = int(20 - osc * 20);
+			int y = grid_y >> 1;
+			if (y < 0)
+				y = -1;
+			else if (y < 21)
+				plot_buf[y][x] = (grid_y & 1) ? plot_bottom : plot_top;
+			for (y += 1; y < 21; ++y)
+				plot_buf[y][x] = plot_fill;
+		}
+		if (!WriteConsoleOutput(hOut, &plot_buf[0][0], plot_size, plot_pos, &plot_region))
+		{
+			CHAR buf[256];
+			FormatMessage(FORMAT_MESSAGE_FROM_SYSTEM, NULL, GetLastError(), MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT), buf, 256, NULL);
+			DebugPrint("Error plotting wave: %s", buf);
 		}
 
 		// sleep for 1/60th of second
