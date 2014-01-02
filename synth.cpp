@@ -129,9 +129,9 @@ static const float POLYBLEP_WIDTH = 1.5f;
 // Valimaki/Huovilainen PolyBLEP
 static inline float PolyBLEP(float t, float w)
 {
-	if (t > w)
+	if (t >= w)
 		return 0.0f;
-	if (t < -w)
+	if (t <= -w)
 		return 0.0f;
 	t /= w;
 	if (t > 0.0f)
@@ -145,9 +145,9 @@ static const float INTEGRATED_POLYBLEP_WIDTH = 1.5f;
 // symbolically-integrated PolyBLEP
 static inline float IntegratedPolyBLEP(float t, float w)
 {
-	if (t > w)
+	if (t >= w)
 		return 0.0f;
-	if (t < -w)
+	if (t <= -w)
 		return 0.0f;
 	t /= w;
 	float const t2 = t * t;
@@ -245,7 +245,7 @@ typedef float(*OscillatorFunc)(OscillatorConfig const &config, OscillatorState &
 typedef void(*OscillatorLoopFunc)(OscillatorConfig const &config, OscillatorState &state, float step);
 
 
-// low frequency oscillator configuration
+// base frequency oscillator configuration
 struct OscillatorConfig
 {
 	Wave wavetype;
@@ -261,11 +261,6 @@ struct OscillatorConfig
 	{
 	}
 };
-OscillatorConfig lfo_config;
-// TO DO: multiple LFOs?
-// TO DO: LFO key sync
-// TO DO: LFO temp sync?
-// TO DO: LFO keyboard follow dial?
 
 // oscillator state
 struct OscillatorState
@@ -276,6 +271,19 @@ struct OscillatorState
 
 	float Update(OscillatorConfig const &config, float frequency, float const step);
 };
+
+// low-frequency oscillator configuration
+struct LFOOscillatorConfig : public OscillatorConfig
+{
+	float frequency_base;	// logarithmic offset from 1 Hz
+};
+LFOOscillatorConfig lfo_config;
+// TO DO: multiple LFOs?
+// TO DO: LFO key sync
+// TO DO: LFO temp sync?
+// TO DO: LFO keyboard follow dial?
+
+// low-frequency oscillator state
 OscillatorState lfo_state;
 
 // note oscillator configuration
@@ -283,7 +291,7 @@ struct NoteOscillatorConfig : public OscillatorConfig
 {
 	// base parameters
 	float waveparam_base;
-	float frequency_base;	// offset from key frequency in semitones
+	float frequency_base;	// logarithmic offset
 	float amplitude_base;
 
 	// LFO modulation parameters
@@ -941,7 +949,7 @@ DWORD CALLBACK WriteStream(HSTREAM handle, short *buffer, DWORD length, void *us
 			{
 				// compute cutoff frequency
 				// (assume key follow)
-				float cutoff = key_freq * powf(2, (osc_config.frequency_base + flt_config.cutoff + flt_config.cutoff_lfo * lfo + flt_config.cutoff_env * flt_env_amplitude) / 12.0f);
+				float cutoff = key_freq * powf(2, osc_config.frequency_base + flt_config.cutoff + flt_config.cutoff_lfo * lfo + flt_config.cutoff_env * flt_env_amplitude);
 
 				// compute filter values
 				flt_state[k].Setup(cutoff, flt_config.resonance);
@@ -1010,6 +1018,46 @@ void PrintKeyOctave(HANDLE hOut)
 	FillConsoleOutputAttribute(hOut, FOREGROUND_RED | FOREGROUND_GREEN | FOREGROUND_BLUE | BACKGROUND_BLUE, 1, pos, &written);
 }
 
+void PrintAntialias(HANDLE hOut)
+{
+	COORD pos = { 41, 10 };
+	PrintConsole(hOut, pos, "F12 Antialias: %3s", use_antialias ? "ON" : "OFF");
+
+	DWORD written;
+	pos.X += 15;
+	FillConsoleOutputAttribute(hOut, use_antialias ? FOREGROUND_GREEN : FOREGROUND_RED, 3, pos, &written);
+}
+
+// update a logarthmic-frequency property
+void UpdateFrequencyProperty(float &property, int const sign, DWORD const modifiers, float const minimum, float const maximum)
+{
+	float value = roundf(property * 1200.0f);
+	if (modifiers & (LEFT_ALT_PRESSED | RIGHT_ALT_PRESSED))
+		value += sign * 1;		// tiny step: 1 cent
+	else if (modifiers & (LEFT_CTRL_PRESSED | RIGHT_CTRL_PRESSED))
+		value += sign * 10;		// small step: 10 cents
+	else if (!(modifiers & (SHIFT_PRESSED)))
+		value += sign * 100;	// normal step: 1 semitone
+	else
+		value += sign * 1200;	// large step: 1 octave
+	property = Clamp(value / 1200.0f, minimum, maximum);
+}
+
+// update a linear percentage property
+void UpdatePercentageProperty(float &property, int const sign, DWORD const modifiers, float const minimum, float const maximum)
+{
+	float value = roundf(property * 256.0f);
+	if (modifiers & (LEFT_ALT_PRESSED | RIGHT_ALT_PRESSED))
+		value += sign * 1;	// tiny step: 1/256
+	else if (modifiers & (LEFT_CTRL_PRESSED | RIGHT_CTRL_PRESSED))
+		value += sign * 4;	// small step: 4/256
+	else if (!(modifiers & (SHIFT_PRESSED)))
+		value += sign * 16;	// normal step: 16/256
+	else
+		value += sign * 64;	// large step: 64/256
+	property = Clamp(value / 256.0f, minimum, maximum);
+}
+
 void MenuLFO(HANDLE hOut, WORD key, DWORD modifiers)
 {
 	COORD pos = { 1, 12 };
@@ -1040,17 +1088,11 @@ void MenuLFO(HANDLE hOut, WORD key, DWORD modifiers)
 			lfo_state.value = wave_start_value[lfo_config.wavetype];
 			break;
 		case 1:
-			if (modifiers & (LEFT_CTRL_PRESSED | RIGHT_CTRL_PRESSED))
-				lfo_config.waveparam += sign * 16.0f / 256.0f;
-			else
-				lfo_config.waveparam += sign * 1.0f / 256.0f;
-			lfo_config.waveparam = Clamp(lfo_config.waveparam, 0.0f, 1.0f);
+			UpdatePercentageProperty(lfo_config.waveparam, sign, modifiers, 0, 1);
 			break;
 		case 2:
-			if (key == VK_RIGHT)
-				lfo_config.frequency *= 2.0f;
-			else
-				lfo_config.frequency *= 0.5f;
+			UpdateFrequencyProperty(lfo_config.frequency_base, sign, modifiers, -8, 14);
+			lfo_config.frequency = powf(2.0f, lfo_config.frequency_base);
 			break;
 		}
 		break;
@@ -1064,16 +1106,16 @@ void MenuLFO(HANDLE hOut, WORD key, DWORD modifiers)
 		FillConsoleOutputAttribute(hOut, menu_item_attrib[menu_active == MENU_LFO && menu_item[MENU_LFO] == i], 18, p, &written);
 	}
 
-	PrintConsole(hOut, pos, "F%d | LFO", MENU_LFO + 1);
+	PrintConsole(hOut, pos, "F%d\xB3 LFO", MENU_LFO + 1);
 
 	++pos.Y;
 	PrintConsole(hOut, pos, "%-10s", wave_name[lfo_config.wavetype]);
 
 	++pos.Y;
-	PrintConsole(hOut, pos, "Width: %5.1f%%", lfo_config.waveparam * 100.0f);
+	PrintConsole(hOut, pos, "Width:     % 6.1f%%", lfo_config.waveparam * 100.0f);
 
 	++pos.Y;
-	PrintConsole(hOut, pos, "Freq:   %4gHz", lfo_config.frequency);
+	PrintConsole(hOut, pos, "Freq: % 10.3fHz", lfo_config.frequency);
 }
 
 void MenuOSC(HANDLE hOut, WORD key, DWORD modifiers)
@@ -1109,55 +1151,22 @@ void MenuOSC(HANDLE hOut, WORD key, DWORD modifiers)
 			}
 			break;
 		case 1:
-			if (modifiers & (SHIFT_PRESSED))
-				osc_config.waveparam_base += sign * 256.0f / 256.0f;
-			else if (modifiers & (LEFT_CTRL_PRESSED | RIGHT_CTRL_PRESSED))
-				osc_config.waveparam_base += sign * 16.0f / 256.0f;
-			else
-				osc_config.waveparam_base += sign * 1.0f / 256.0f;
-			osc_config.waveparam_base = Clamp(osc_config.waveparam_base, 0.0f, 1.0f);
+			UpdatePercentageProperty(osc_config.waveparam_base, sign, modifiers, 0, 1);
 			break;
 		case 2:
-			if (modifiers & (SHIFT_PRESSED))
-				osc_config.frequency_base += sign * 1200.0f / 1200.0f;
-			else if (modifiers & (LEFT_CTRL_PRESSED | RIGHT_CTRL_PRESSED))
-				osc_config.frequency_base += sign * 100.0f / 1200.0f;
-			else if (!(modifiers & (LEFT_ALT_PRESSED | RIGHT_ALT_PRESSED)))
-				osc_config.frequency_base += sign * 10.0f / 1200.0f;
-			else
-				osc_config.frequency_base += sign * 1.0f / 1200.0f;
+			UpdateFrequencyProperty(osc_config.frequency_base, sign, modifiers, -10, 10);
 			break;
 		case 3:
-			if (modifiers & (SHIFT_PRESSED))
-				osc_config.amplitude_base += sign * 256.0f / 256.0f;
-			else if (modifiers & (LEFT_CTRL_PRESSED | RIGHT_CTRL_PRESSED))
-				osc_config.amplitude_base += sign * 16.0f / 256.0f;
-			else
-				osc_config.amplitude_base += sign * 1.0f / 256.0f;
+			UpdatePercentageProperty(osc_config.amplitude_base, sign, modifiers, -FLT_MAX, FLT_MAX);
 			break;
 		case 4:
-			if (modifiers & (SHIFT_PRESSED))
-				osc_config.waveparam_lfo += sign * 256.0f / 256.0f;
-			else if (modifiers & (LEFT_CTRL_PRESSED | RIGHT_CTRL_PRESSED))
-				osc_config.waveparam_lfo += sign * 16.0f / 256.0f;
-			else
-				osc_config.waveparam_lfo += sign * 1.0f / 256.0f;
+			UpdatePercentageProperty(osc_config.waveparam_lfo, sign, modifiers, -FLT_MAX, FLT_MAX);
 			break;
 		case 5:
-			if (modifiers & (SHIFT_PRESSED))
-				osc_config.frequency_lfo += sign * 100.0f / 1200.0f;
-			else if (modifiers & (LEFT_CTRL_PRESSED | RIGHT_CTRL_PRESSED))
-				osc_config.frequency_lfo += sign * 10.0f / 1200.0f;
-			else
-				osc_config.frequency_lfo += sign * 1.0f / 1200.0f;
+			UpdateFrequencyProperty(osc_config.frequency_lfo, sign, modifiers, -10, 10);
 			break;
 		case 6:
-			if (modifiers & (SHIFT_PRESSED))
-				osc_config.amplitude_lfo += sign * 100.0f / 1200.0f;
-			else if (modifiers & (LEFT_CTRL_PRESSED | RIGHT_CTRL_PRESSED))
-				osc_config.amplitude_lfo += sign * 16.0f / 256.0f;
-			else
-				osc_config.amplitude_lfo += sign * 1.0f / 256.0f;
+			UpdatePercentageProperty(osc_config.amplitude_lfo, sign, modifiers, -FLT_MAX, FLT_MAX);
 			break;
 		}
 		break;
@@ -1171,28 +1180,28 @@ void MenuOSC(HANDLE hOut, WORD key, DWORD modifiers)
 		FillConsoleOutputAttribute(hOut, menu_item_attrib[menu_active == MENU_OSC && menu_item[MENU_OSC] == i], 18, p, &written);
 	}
 
-	PrintConsole(hOut, pos, "F%d | OSC", MENU_OSC + 1);
+	PrintConsole(hOut, pos, "F%d\xB3 OSC", MENU_OSC + 1);
 
 	++pos.Y;
 	PrintConsole(hOut, pos, "%-10s", wave_name[osc_config.wavetype]);
 
 	++pos.Y;
-	PrintConsole(hOut, pos, "Parm Base: % 6.1f%%", osc_config.waveparam_base * 100.0f);
+	PrintConsole(hOut, pos, "Width:     % 6.1f%%", osc_config.waveparam_base * 100.0f);
 
 	++pos.Y;
-	PrintConsole(hOut, pos, "Freq Base:  % 6.2f", roundf(osc_config.frequency_base * 1200.0f) / 100.0f);
+	PrintConsole(hOut, pos, "Frequency: % 7.2f", osc_config.frequency_base * 12.0f);
 
 	++pos.Y;
-	PrintConsole(hOut, pos, "Amp Base:  % 6.1f%%", osc_config.amplitude_base * 100.0f);
+	PrintConsole(hOut, pos, "Amplitude: % 6.1f%%", osc_config.amplitude_base * 100.0f);
 
 	++pos.Y;
-	PrintConsole(hOut, pos, "Parm LFO:  % 6.1f%%", osc_config.waveparam_lfo * 100.0f);
+	PrintConsole(hOut, pos, "Width LFO: % 6.1f%%", osc_config.waveparam_lfo * 100.0f);
 
 	++pos.Y;
-	PrintConsole(hOut, pos, "Freq LFO:   % 6.2f", roundf(osc_config.frequency_lfo * 1200.0f) / 100.0f);
+	PrintConsole(hOut, pos, "Freq LFO:  % 7.2f", osc_config.frequency_lfo * 12.0f);
 
 	++pos.Y;
-	PrintConsole(hOut, pos, "Amp LFO:   % 6.1f%%", osc_config.amplitude_lfo * 100.0f);
+	PrintConsole(hOut, pos, "Ampl LFO:  % 6.1f%%", osc_config.amplitude_lfo * 100.0f);
 }
 
 void MenuFLT(HANDLE hOut, WORD key, DWORD modifiers)
@@ -1222,31 +1231,16 @@ void MenuFLT(HANDLE hOut, WORD key, DWORD modifiers)
 			flt_config.mode = FilterConfig::Mode((flt_config.mode + FilterConfig::COUNT + sign) % FilterConfig::COUNT);
 			break;
 		case 1:
-			if (modifiers & (SHIFT_PRESSED))
-				flt_config.resonance += sign * 256.0f / 256.0f;
-			else if (modifiers & (LEFT_CTRL_PRESSED | RIGHT_CTRL_PRESSED))
-				flt_config.resonance += sign * 16.0f / 256.0f;
-			else
-				flt_config.resonance += sign * 1.0f / 256.0f;
-			flt_config.resonance = Clamp(flt_config.resonance, 0.0f, 4.0f);
+			UpdatePercentageProperty(flt_config.resonance, sign, modifiers, 0, 4);
 			break;
 		case 2:
-			if (modifiers & (LEFT_CTRL_PRESSED | RIGHT_CTRL_PRESSED))
-				flt_config.cutoff += sign * 12.0f;
-			else
-				flt_config.cutoff += sign * 1.0f;
+			UpdateFrequencyProperty(flt_config.cutoff, sign, modifiers, -10, 10);
 			break;
 		case 3:
-			if (modifiers & (LEFT_CTRL_PRESSED | RIGHT_CTRL_PRESSED))
-				flt_config.cutoff_lfo += sign * 12.0f;
-			else
-				flt_config.cutoff_lfo += sign * 1.0f;
+			UpdateFrequencyProperty(flt_config.cutoff_lfo, sign, modifiers, -10, 10);
 			break;
 		case 4:
-			if (modifiers & (LEFT_CTRL_PRESSED | RIGHT_CTRL_PRESSED))
-				flt_config.cutoff_env += sign * 12.0f;
-			else
-				flt_config.cutoff_env += sign * 1.0f;
+			UpdateFrequencyProperty(flt_config.cutoff_env, sign, modifiers, -10, 10);
 			break;
 		case 5:
 			if (key == VK_RIGHT)
@@ -1261,11 +1255,7 @@ void MenuFLT(HANDLE hOut, WORD key, DWORD modifiers)
 				flt_env_config.decay_rate *= 0.5f;
 			break;
 		case 7:
-			if (modifiers & (LEFT_CTRL_PRESSED | RIGHT_CTRL_PRESSED))
-				flt_env_config.sustain_level += sign * 16.0f / 256.0f;
-			else
-				flt_env_config.sustain_level += sign * 1.0f / 256.0f;
-			flt_env_config.sustain_level = Clamp(flt_env_config.sustain_level, 0.0f, 1.0f);
+			UpdatePercentageProperty(flt_env_config.sustain_level, sign, modifiers, 0, 1);
 			break;
 		case 8:
 			if (key == VK_RIGHT)
@@ -1285,34 +1275,34 @@ void MenuFLT(HANDLE hOut, WORD key, DWORD modifiers)
 		FillConsoleOutputAttribute(hOut, menu_item_attrib[menu_active == MENU_FLT && menu_item[MENU_FLT] == i], 18, p, &written);
 	}
 
-	PrintConsole(hOut, pos, "F%d | FLT", MENU_FLT + 1);
+	PrintConsole(hOut, pos, "F%d\xB3 FLT", MENU_FLT + 1);
 
 	++pos.Y;
 	PrintConsole(hOut, pos, "%-18s", filter_name[flt_config.mode]);
 
 	++pos.Y;
-	PrintConsole(hOut, pos, "Resonance:  %5.3f", flt_config.resonance);
+	PrintConsole(hOut, pos, "Resonance: % 7.3f", flt_config.resonance);
 
 	++pos.Y;
-	PrintConsole(hOut, pos, "Cutoff Base: %5.0f", flt_config.cutoff);
+	PrintConsole(hOut, pos, "Cutoff:    % 7.2f", flt_config.cutoff * 12.0f);
 
 	++pos.Y;
-	PrintConsole(hOut, pos, "Cutoff LFO:  %5.0f", flt_config.cutoff_lfo);
+	PrintConsole(hOut, pos, "Cutoff LFO:% 7.2f", flt_config.cutoff_lfo * 12.0f);
 
 	++pos.Y;
-	PrintConsole(hOut, pos, "Cutoff ENV:  %5.0f", flt_config.cutoff_env);
+	PrintConsole(hOut, pos, "Cutoff ENV:% 7.2f", flt_config.cutoff_env * 12.0f);
 
 	++pos.Y;
-	PrintConsole(hOut, pos, "Attack:  %5g", flt_env_config.attack_rate);
+	PrintConsole(hOut, pos, "Attack:   %5g", flt_env_config.attack_rate);
 
 	++pos.Y;
-	PrintConsole(hOut, pos, "Decay:   %5g", flt_env_config.decay_rate);
+	PrintConsole(hOut, pos, "Decay:    %5g", flt_env_config.decay_rate);
 
 	++pos.Y;
-	PrintConsole(hOut, pos, "Sustain: %5.1f%%", flt_env_config.sustain_level * 100.0f);
+	PrintConsole(hOut, pos, "Sustain:    %5.1f%%", flt_env_config.sustain_level * 100.0f);
 
 	++pos.Y;
-	PrintConsole(hOut, pos, "Release: %5g", flt_env_config.release_rate);
+	PrintConsole(hOut, pos, "Release:  %5g", flt_env_config.release_rate);
 }
 
 void MenuVOL(HANDLE hOut, WORD key, DWORD modifiers)
@@ -1351,11 +1341,7 @@ void MenuVOL(HANDLE hOut, WORD key, DWORD modifiers)
 				vol_env_config.decay_rate *= 0.5f;
 			break;
 		case 2:
-			if (modifiers & (LEFT_CTRL_PRESSED | RIGHT_CTRL_PRESSED))
-				vol_env_config.sustain_level += sign * 16.0f / 256.0f;
-			else
-				vol_env_config.sustain_level += sign * 1.0f / 256.0f;
-			vol_env_config.sustain_level = Clamp(vol_env_config.sustain_level, 0.0f, 1.0f);
+			UpdatePercentageProperty(vol_env_config.sustain_level, sign, modifiers, 0, 1);
 			break;
 		case 3:
 			if (key == VK_RIGHT)
@@ -1375,19 +1361,19 @@ void MenuVOL(HANDLE hOut, WORD key, DWORD modifiers)
 		FillConsoleOutputAttribute(hOut, menu_item_attrib[menu_active == MENU_VOL && menu_item[MENU_VOL] == i], 18, p, &written);
 	}
 
-	PrintConsole(hOut, pos, "F%d | VOL", MENU_VOL + 1);
+	PrintConsole(hOut, pos, "F%d\xB3 VOL", MENU_VOL + 1);
 
 	++pos.Y;
-	PrintConsole(hOut, pos, "Attack:  %5g", vol_env_config.attack_rate);
+	PrintConsole(hOut, pos, "Attack:   %5g", vol_env_config.attack_rate);
 
 	++pos.Y;
-	PrintConsole(hOut, pos, "Decay:   %5g", vol_env_config.decay_rate);
+	PrintConsole(hOut, pos, "Decay:    %5g", vol_env_config.decay_rate);
 
 	++pos.Y;
-	PrintConsole(hOut, pos, "Sustain: %5.1f%%", vol_env_config.sustain_level * 100.0f);
+	PrintConsole(hOut, pos, "Sustain:    %5.1f%%", vol_env_config.sustain_level * 100.0f);
 
 	++pos.Y;
-	PrintConsole(hOut, pos, "Release: %5g", vol_env_config.release_rate);
+	PrintConsole(hOut, pos, "Release:  %5g", vol_env_config.release_rate);
 }
 
 static void EnableEffect(int index)
@@ -1434,14 +1420,17 @@ void MenuFX(HANDLE hOut, WORD key, DWORD modifiers)
 		break;
 	}
 
-	PrintConsole(hOut, pos, "F5 | FX");
+	PrintConsole(hOut, pos, "F%d\xB3 FX", MENU_FX + 1);
 	FillConsoleOutputAttribute(hOut, menu_title_attrib[menu_active == MENU_FX], 18, pos, &written);
 
 	for (int i = 0; i < ARRAY_SIZE(fx); ++i)
 	{
 		++pos.Y;
-		PrintConsole(hOut, pos, "%-11s %-3s", fx_name[i], fx[i] ? "ON" : "off");
-		FillConsoleOutputAttribute(hOut, menu_item_attrib[menu_active == MENU_FX && menu_item[MENU_FX] == i], 18, pos, &written);
+		PrintConsole(hOut, pos, "%-11s    %3s", fx_name[i], fx[i] ? "ON" : "OFF");
+		WORD const attrib = menu_item_attrib[menu_active == MENU_FX && menu_item[MENU_FX] == i];
+		FillConsoleOutputAttribute(hOut, attrib, 15, pos, &written);
+		COORD const pos2 = { pos.X + 15, pos.Y };
+		FillConsoleOutputAttribute(hOut, (attrib & 0xF0) | (fx[i] ? FOREGROUND_GREEN : FOREGROUND_RED), 3, pos2, &written);
 	}
 }
 
@@ -1553,9 +1542,9 @@ void UpdateOscillatorWaveformDisplay(HANDLE hOut)
 {
 	// show the oscillator wave shape
 	// (using the lowest key frequency as reference)
-	CHAR_INFO const fill = { 0, BACKGROUND_GREEN };
+	CHAR_INFO const fill = { 0, BACKGROUND_BLUE };
 	CHAR_INFO const plot[2] = {
-		{ 223, BACKGROUND_GREEN | FOREGROUND_RED | FOREGROUND_GREEN | FOREGROUND_BLUE },
+		{ 223, FOREGROUND_RED | FOREGROUND_GREEN | FOREGROUND_BLUE | BACKGROUND_BLUE },
 		{ 220, FOREGROUND_RED | FOREGROUND_GREEN | FOREGROUND_BLUE }
 	};
 	CHAR_INFO buf[21][80] = { 0 };
@@ -1598,11 +1587,6 @@ void UpdateOscillatorWaveformDisplay(HANDLE hOut)
 			buf[y][x] = plot[grid_y & 1];
 		for (y += 1; y < 21; ++y)
 			buf[y][x] = fill;
-		if (state.loops & 1)
-		{
-			for (y = 0; y < 21; ++y)
-				buf[y][x].Attributes |= BACKGROUND_BLUE;
-		}
 		state.phase += step;
 		if (state.phase >= 1.0f)
 		{
@@ -1750,6 +1734,7 @@ void main(int argc, char **argv)
 	// show output scale and key octave
 	PrintOutputScale(hOut);
 	PrintKeyOctave(hOut);
+	PrintAntialias(hOut);
 
 	// show all menus
 	for (int i = 0; i < MENU_COUNT - (info.dsver < 8); ++i)
@@ -1813,6 +1798,7 @@ void main(int argc, char **argv)
 					else if (code == VK_F12)
 					{
 						use_antialias = !use_antialias;
+						PrintAntialias(hOut);
 					}
 					else if (code >= VK_F1 && code < VK_F1 + MENU_COUNT - (info.dsver < 8))
 					{
