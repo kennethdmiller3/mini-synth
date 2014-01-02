@@ -7,10 +7,17 @@
 #include <stdio.h>
 #include <conio.h>
 #include <math.h>
+#include <float.h>
+#include <assert.h>
 #include "bass.h"
 
 BASS_INFO info;
 HSTREAM stream; // the stream
+
+#define FILTER_STILSON 0
+#define FILTER_VARIATION_1 1
+#define FILTER_VARIATION_2 2
+#define FILTER FILTER_VARIATION_1
 
 // debug output
 int DebugPrint(const char *format, ...)
@@ -54,7 +61,7 @@ void Error(char const *text)
 
 #define ARRAY_SIZE(x) (sizeof(x)/sizeof(x[0]))
 
-inline int Clamp(int x, int a, int b)
+template<typename T> static inline T Clamp(T x, T a, T b)
 {
 	if (x < a)
 		return a;
@@ -62,6 +69,12 @@ inline int Clamp(int x, int a, int b)
 		return b;
 	return x;
 }
+
+static inline float Saturate(float input)
+{
+	return 0.5f * (fabsf(input + 1.0f) - fabsf(input - 1.0f));
+}
+
 
 char const title_text[] = ">>> BASS SIMPLE SYNTH";
 COORD const title_pos = { 0, 0 };
@@ -82,6 +95,7 @@ enum MenuMode
 	MENU_LFO,
 	MENU_OSC,
 	MENU_ENV,
+	MENU_FLT,
 	MENU_FX,
 
 	MENU_COUNT
@@ -122,6 +136,7 @@ enum Wave
 	WAVE_POLY4,
 	WAVE_POLY5,
 	WAVE_POLY17,
+	WAVE_NOISE,
 
 	WAVE_COUNT
 };
@@ -135,6 +150,10 @@ static char poly17[(1 << 17) - 1];
 Wave lfo_wavetype = WAVE_SINE;
 float lfo_pulsewidth = 0.5f;
 float lfo_frequency = 1.0f;
+// TO DO: multiple LFOs?
+// TO DO: LFO key sync
+// TO DO: LFO temp sync?
+// TO DO: LFO keyboard follow dial?
 
 // low frequency oscillator state
 float lfo_phase;
@@ -148,6 +167,9 @@ float time_scale = 1.0f;
 float osc_pulsewidth_lfo = 0.0f;
 float osc_frequency_lfo = 0.0f;
 float osc_amplitude_lfo = 0.0f;
+// TO DO: multiple oscillators
+// TO DO: hard sync
+// TO DO: keyboard follow dial?
 
 // oscillator state
 float osc_frequency[KEYS];
@@ -166,15 +188,16 @@ enum EnvelopeState
 
 	ENVELOPE_COUNT
 };
-float env_attack_rate = 1024.0f;
-float env_decay_rate = 1024.0f;
+float env_attack_rate = 256.0f;
+float env_decay_rate = 256.0f;
 float env_sustain_level = 1.0f;
-float env_release_rate = 1024.0f;
+float env_release_rate = 256.0f;
 bool env_gate[KEYS];
 EnvelopeState env_state[KEYS];
 float env_amplitude[KEYS];
 float const ENV_ATTACK_BIAS = 1.0f/(1.0f-expf(-1.0f))-1.0f;	// 1x time constant
 float const ENV_DECAY_BIAS = 1.0f-1.0f/(1.0f-expf(-3.0f));	// 3x time constant
+// TO DO: multiple envelopes?  filter, amplifier, global
 
 WORD const env_attrib[ENVELOPE_COUNT] =
 {
@@ -185,8 +208,40 @@ WORD const env_attrib[ENVELOPE_COUNT] =
 	BACKGROUND_INTENSITY,									// ENVELOPE_RELEASE,
 };
 
+// resonant lowpass filter
+bool flt_enable = false;
+float flt_cutoff = 0.0f;
+float flt_cutoff_lfo = 0.0f;
+float flt_cutoff_env = 0.0f;
+float flt_resonance = 0.0f;
+
+// filter state
+struct FilterState
+{
+#if FILTER == FILTER_STILSON
+	float output;
+	float state[4];
+	float p;
+	float q;
+#elif FILTER == FILTER_VARIATION_1
+	float f, p, q;
+	float b0, b1, b2, b3, b4;
+#else
+	float f;
+	float fb;
+	float scale;
+	float in[4];
+	float out[4];
+#endif
+
+	void Clear(void);
+	void Setup(float cutoff, float resonance);
+	float Apply(float input);
+};
+FilterState flt_state[KEYS];
+
 // output scale factor
-static float const OUTPUTSCALE = 0.25f * 32768;
+float output_scale = 0.5f;
 
 // from Atari800 pokey.c
 static void InitPoly(char aOut[], int aSize, int aTap, unsigned int aSeed, char aInvert)
@@ -205,7 +260,7 @@ static void InitPoly(char aOut[], int aSize, int aTap, unsigned int aSeed, char 
 // names for wave types
 char const * const wave_name[WAVE_COUNT] =
 {
-	"Sine", "Pulse", "Sawtooth", "Triangle", "Poly4", "Poly5", "Poly17"
+	"Sine", "Pulse", "Sawtooth", "Triangle", "Poly4", "Poly5", "Poly17", "Noise"
 };
 
 // multiply oscillator time scale based on wave type
@@ -213,14 +268,14 @@ char const * const wave_name[WAVE_COUNT] =
 // - raise the pitch of poly oscillators by two octaves
 float const wave_time_scale[WAVE_COUNT] =
 {
-	1.0f, 1.0f, 1.0f, 1.0f, 4.0f * 15 / 16, 4.0f * 31 / 32, 4.0f
+	1.0f, 1.0f, 1.0f, 1.0f, 4.0f * 15 / 16, 4.0f * 31 / 32, 4.0f, 1.0f
 };
 
 // restart the oscillator loop index after this many phase cycles
 // - poly oscillators using the loop index to look up precomputed values
 int const wave_loop_cycle[WAVE_COUNT] =
 {
-	1, 1, 1, 1, ARRAY_SIZE(poly4), ARRAY_SIZE(poly5), ARRAY_SIZE(poly17)
+	1, 1, 1, 1, ARRAY_SIZE(poly4), ARRAY_SIZE(poly5), ARRAY_SIZE(poly17), 1
 };
 
 // sine oscillator
@@ -244,7 +299,7 @@ float OscillatorPulse(float amplitude, float phase, int loops, float param)
 float OscillatorSawtooth(float amplitude, float phase, int loops, float param)
 {
 #if 1
-	return 1.0f - 2.0f * phase;
+	return amplitude * (1.0f - 2.0f * phase);
 #else
 	if (phase < 0.5f)
 		return amplitude * 2.0f * phase;
@@ -287,12 +342,189 @@ float OscillatorPoly17(float amplitude, float phase, int loops, float param)
 	return poly17[loops] ? amplitude : -amplitude;
 }
 
+namespace Random
+{
+	// random seed
+	unsigned int gSeed = 0x92D68CA2;
+
+	// set seed
+	inline void Seed(unsigned int aSeed)
+	{
+		gSeed = aSeed;
+	}
+
+	// random unsigned long
+	inline unsigned int Int()
+	{
+#if 1
+		gSeed ^= (gSeed << 13);
+		gSeed ^= (gSeed >> 17);
+		gSeed ^= (gSeed << 5);
+#else
+		gSeed = 1664525L * gSeed + 1013904223L;
+#endif
+		return gSeed;
+	}
+
+	// random uniform float
+	inline float Float()
+	{
+		union { float f; unsigned u; } floatint;
+		floatint.u = 0x3f800000 | (Int() >> 9);
+		return floatint.f - 1.0f;
+	}
+
+	// random range value
+	inline float Value(float aAverage, float aVariance)
+	{
+		return (2.0f * Float() - 1.0f) * aVariance + aAverage;
+	}
+}
+
+// white noise oscillator
+float OscillatorNoise(float amplitude, float phase, int loops, float param)
+{
+	return Random::Value(0.0f, 2.0f * amplitude);
+	//return amplitude * 2.0f * (Random::Float() - Random::Float());
+}
+
 // map wave type enumeration to oscillator function
 typedef float(*OscillatorFunc)(float amplitude, float phase, int loops, float param);
 OscillatorFunc const oscillator[WAVE_COUNT] =
 {
-	OscillatorSine, OscillatorPulse, OscillatorSawtooth, OscillatorTriangle, OscillatorPoly4, OscillatorPoly5, OscillatorPoly17
+	OscillatorSine, OscillatorPulse, OscillatorSawtooth, OscillatorTriangle, OscillatorPoly4, OscillatorPoly5, OscillatorPoly17, OscillatorNoise
 };
+
+void FilterState::Clear()
+{
+#if FILTER == FILTER_STILSON
+	output = 0.0f;
+	memset(state, 0, sizeof(state));
+#elif FILTER == FILTER_VARIATION_1
+	f = p = q = 0.0f;
+	b0 = b1 = b2 = b3 = b4 = 0.0f;
+#else
+	f = 0.0f;
+	fb = 0.0f;
+	scale = 0.0f;
+	memset(in, 0, sizeof(in));
+	memset(out, 0, sizeof(out));
+#endif
+}
+
+#if FILTER == FILTER_STILSON
+static float const gaintable[199] = {
+	0.999969f, 0.990082f, 0.980347f, 0.970764f, 0.961304f, 0.951996f, 0.94281f, 0.933777f, 0.924866f, 0.916077f,
+	0.90741f, 0.898865f, 0.890442f, 0.882141f, 0.873962f, 0.865906f, 0.857941f, 0.850067f, 0.842346f, 0.834686f,
+	0.827148f, 0.819733f, 0.812378f, 0.805145f, 0.798004f, 0.790955f, 0.783997f, 0.77713f, 0.770355f, 0.763672f,
+	0.75708f, 0.75058f, 0.744141f, 0.737793f, 0.731537f, 0.725342f, 0.719238f, 0.713196f, 0.707245f, 0.701355f,
+	0.695557f, 0.689819f, 0.684174f, 0.678558f, 0.673035f, 0.667572f, 0.66217f, 0.65686f, 0.651581f, 0.646393f,
+	0.641235f, 0.636169f, 0.631134f, 0.62619f, 0.621277f, 0.616425f, 0.611633f, 0.606903f, 0.602234f, 0.597626f,
+	0.593048f, 0.588531f, 0.584045f, 0.579651f, 0.575287f, 0.570953f, 0.566681f, 0.562469f, 0.558289f, 0.554169f,
+	0.550079f, 0.546051f, 0.542053f, 0.538116f, 0.53421f, 0.530334f, 0.52652f, 0.522736f, 0.518982f, 0.515289f,
+	0.511627f, 0.507996f, 0.504425f, 0.500885f, 0.497375f, 0.493896f, 0.490448f, 0.487061f, 0.483704f, 0.480377f,
+	0.477081f, 0.473816f, 0.470581f, 0.467377f, 0.464203f, 0.46109f, 0.457977f, 0.454926f, 0.451874f, 0.448883f,
+	0.445892f, 0.442932f, 0.440033f, 0.437134f, 0.434265f, 0.431427f, 0.428619f, 0.425842f, 0.423096f, 0.42038f,
+	0.417664f, 0.415009f, 0.412354f, 0.409729f, 0.407135f, 0.404572f, 0.402008f, 0.399506f, 0.397003f, 0.394501f,
+	0.392059f, 0.389618f, 0.387207f, 0.384827f, 0.382477f, 0.380127f, 0.377808f, 0.375488f, 0.37323f, 0.370972f,
+	0.368713f, 0.366516f, 0.364319f, 0.362122f, 0.359985f, 0.357849f, 0.355713f, 0.353607f, 0.351532f, 0.349457f,
+	0.347412f, 0.345398f, 0.343384f, 0.34137f, 0.339417f, 0.337463f, 0.33551f, 0.333588f, 0.331665f, 0.329773f,
+	0.327911f, 0.32605f, 0.324188f, 0.322357f, 0.320557f, 0.318756f, 0.316986f, 0.315216f, 0.313446f, 0.311707f,
+	0.309998f, 0.308289f, 0.30658f, 0.304901f, 0.303223f, 0.301575f, 0.299927f, 0.298309f, 0.296692f, 0.295074f,
+	0.293488f, 0.291931f, 0.290375f, 0.288818f, 0.287262f, 0.285736f, 0.284241f, 0.282715f, 0.28125f, 0.279755f,
+	0.27829f, 0.276825f, 0.275391f, 0.273956f, 0.272552f, 0.271118f, 0.269745f, 0.268341f, 0.266968f, 0.265594f,
+	0.264252f, 0.262909f, 0.261566f, 0.260223f, 0.258911f, 0.257599f, 0.256317f, 0.255035f, 0.25375f
+};
+#endif
+
+void FilterState::Setup(float cutoff, float resonance)
+{
+#if FILTER == FILTER_STILSON
+	// compute pole parameter
+	float const fn = 0.5f * info.freq;
+	float const fc = cutoff < fn ? cutoff / fn : 1.0f;
+	p = ((-0.69346f * fc - 0.59515f) * fc + 3.2937f) * fc - 1.0072f;
+
+#if 0
+	// compute feedback parameter
+	q = resonance * ((((0.0332f * p - 0.0782f) * p + 0.1443f) * p - 0.2931f) * p + 0.449f);
+#else
+	// compute feedback parameter
+	float ix = p * 99;
+	int ixint = int(floor(ix));
+	float ixfrac = ix - ixint;
+	q = resonance * ((1.0f - ixfrac) * gaintable[ixint + 99] + ixfrac * gaintable[ixint + 100]);
+#endif
+#elif FILTER == FILTER_VARIATION_1
+	float fn = 0.5f * info.freq;
+	float fc = cutoff < fn ? cutoff / fn : 1.0f;
+	float fq = 1.0f - fc;
+	p = fc + 0.8f * fc * fq;
+	f = p + p - 1.0f;
+	q = resonance * (1.0f + fq * (0.5f + fq * (-0.5f + 2.8f * fq)));
+#else
+	f = cutoff * 1.16f * 2.0f / info.freq;
+	if (f > 1.0f)
+		f = 1.0f;
+	fb = resonance * (1.0f - 0.15f * (f * f));
+	scale = 0.35013f * (f * f) * (f * f);
+#endif
+}
+
+float FilterState::Apply(float input)
+{
+#if FILTER == FILTER_STILSON
+	// feedback
+	output = 0.25f * (input - output);
+
+	// four-pole low-pass filter
+	for (int pole = 0; pole < 4; ++pole)
+	{
+		float temp = state[pole];
+		output = Saturate(output + p * (output - temp));
+		state[pole] = output;
+		output = Saturate(output + temp);
+	}
+
+	float const value = output;
+	output *= q;
+	return value;
+#elif FILTER == FILTER_VARIATION_1
+	float t1, t2;
+
+	// feedback
+	float const in = input - q * b4;
+
+	// four-pole low-pass filter
+	t1 = b1;
+	b1 = Saturate((in + b0) * p - b1 * f);
+	t2 = b2;
+	b2 = Saturate((b1 + t1) * p - b2 * f);
+	t1 = b3;
+	b3 = Saturate((b2 + t2) * p - b2 * f);
+	b4 = Saturate((b3 + t1) * p - b4 * f);
+	b0 = in;
+
+	//return b4;				// lowpass
+	return in - b4;		// highpass
+	//return 3 * (b3 - b4)	// bandpass
+#else
+	// feedback
+	input = Saturate(scale * (input - out[3] * fb));
+
+	// four-pole low-pass filter
+	out[0] = Saturate(input + 0.3f * in[0] + (1.0f - f) * out[0]);
+	in[0] = input;
+	out[1] = Saturate(out[0] + 0.3f * in[1] + (1.0f - f) * out[1]);
+	in[1] = out[0];
+	out[2] = Saturate(out[1] + 0.3f * in[2] + (1.0f - f) * out[2]);
+	in[2] = out[1];
+	out[3] = Saturate(out[2] + 0.3f * in[3] + (1.0f - f) * out[3]);
+	in[3] = out[2];
+
+	return out[3];
+#endif
+}
 
 DWORD CALLBACK WriteStream(HSTREAM handle, short *buffer, DWORD length, void *user)
 {
@@ -346,7 +578,7 @@ DWORD CALLBACK WriteStream(HSTREAM handle, short *buffer, DWORD length, void *us
 		// get low-frequency oscillator value
 		float const lfo = lfo_func(1.0f, lfo_phase, lfo_loops, lfo_pulsewidth);
 
-		// advance low-frequency oscillator phase
+		// accumulate low-frequency oscillator phase
 		// (not subject to time scale)
 		lfo_phase += lfo_frequency * step;
 		while (lfo_phase >= 1.0f)
@@ -375,18 +607,6 @@ DWORD CALLBACK WriteStream(HSTREAM handle, short *buffer, DWORD length, void *us
 		for (int i = 0; i < active; ++i)
 		{
 			int k = index[i];
-
-			// accumulate the oscillator value
-			sample += osc_func(OUTPUTSCALE * env_amplitude[k] * modulate_amplitude, osc_phase[k], osc_loops[k], pulsewidth);
-
-			// advance oscillator phase
-			osc_phase[k] += osc_frequency[k] * modulated_step;
-			while (osc_phase[k] >= 1.0f)
-			{
-				osc_phase[k] -= 1.0f;
-				if (++osc_loops[k] >= osc_loop_cycle)
-					osc_loops[k] = 0;
-			}
 
 			// update envelope generator
 			float env_target;
@@ -426,17 +646,51 @@ DWORD CALLBACK WriteStream(HSTREAM handle, short *buffer, DWORD length, void *us
 					env_amplitude[k] = 0.0f;
 					env_state[k] = ENVELOPE_OFF;
 
+					// clear filter state
+					flt_state[k].Clear();
+
 					// remove from active oscillators
 					--active;
 					index[i] = index[active];
 					--i;
+					continue;
 				}
 				break;
+			}
+
+			// get oscillator value
+			float const osc = osc_func(env_amplitude[k] * modulate_amplitude, osc_phase[k], osc_loops[k], pulsewidth);
+
+			// accumulate oscillator phase
+			osc_phase[k] += osc_frequency[k] * modulated_step;
+			while (osc_phase[k] >= 1.0f)
+			{
+				osc_phase[k] -= 1.0f;
+				if (++osc_loops[k] >= osc_loop_cycle)
+					osc_loops[k] = 0;
+			}
+
+			if (flt_enable)
+			{
+				// cutoff frequency
+				float cutoff = osc_frequency[k] * time_scale * powf(2, (flt_cutoff + flt_cutoff_lfo * lfo + flt_cutoff_env * env_amplitude[k]) / 12.0f);
+
+				// compute filter values
+				flt_state[k].Setup(cutoff, flt_resonance);
+
+				// accumulate the filtered oscillator value
+				sample += flt_state[k].Apply(osc);
+			}
+			else
+			{
+				// accumulate unfiltered oscillator
+				sample += osc;
 			}
 		}
 
 		// left and right channels are the same
-		short output = (short)Clamp(sample, SHRT_MIN, SHRT_MAX);
+		//short output = (short)Clamp(sample * output_scale * 32768, SHRT_MIN, SHRT_MAX);
+		short output = (short)(tanhf(sample * output_scale) * 32768);
 		*buffer++ = output;
 		*buffer++ = output;
 	}
@@ -448,6 +702,12 @@ void PrintBufferSize(HANDLE hOut, DWORD buflen)
 {
 	COORD pos = { 1, 7 };
 	PrintConsole(hOut, pos, "- + Buffer: %3dms", buflen);
+}
+
+void PrintOutputScale(HANDLE hOut)
+{
+	COORD pos = { 1, 8 };
+	PrintConsole(hOut, pos, "    Output: %5.1f%%", output_scale * 100.0f);
 }
 
 void MenuLFO(HANDLE hOut, WORD key, DWORD modifiers)
@@ -777,6 +1037,124 @@ void MenuENV(HANDLE hOut, WORD key, DWORD modifiers)
 	PrintConsole(hOut, pos, "Release: %5g", env_release_rate);
 }
 
+void MenuFLT(HANDLE hOut, WORD key, DWORD modifiers)
+{
+	COORD pos = { 61, 12 };
+	DWORD written;
+
+	switch (key)
+	{
+	case VK_UP:
+		if (--menu_item[MENU_FLT] < 0)
+			menu_item[MENU_FLT] = 4;
+		break;
+
+	case VK_DOWN:
+		if (++menu_item[MENU_FLT] > 4)
+			menu_item[MENU_FLT] = 0;
+		break;
+
+	case VK_LEFT:
+		switch (menu_item[MENU_FLT])
+		{
+		case 0:
+			flt_enable = false;
+			break;
+		case 1:
+			if (modifiers & (SHIFT_PRESSED))
+				flt_resonance -= 256.0f / 256.0f;
+			else if (modifiers & (LEFT_CTRL_PRESSED | RIGHT_CTRL_PRESSED))
+				flt_resonance -= 16.0f / 256.0f;
+			else
+				flt_resonance -= 1.0f / 256.0f;
+			if (flt_resonance < 0.0f)
+				flt_resonance = 0.0f;
+			break;
+		case 2:
+			if (modifiers & (LEFT_CTRL_PRESSED | RIGHT_CTRL_PRESSED))
+				flt_cutoff -= 12.0f;
+			else
+				flt_cutoff -= 1.0f;
+			break;
+		case 3:
+			if (modifiers & (LEFT_CTRL_PRESSED | RIGHT_CTRL_PRESSED))
+				flt_cutoff_lfo -= 12.0f;
+			else
+				flt_cutoff_lfo -= 1.0f;
+			break;
+		case 4:
+			if (modifiers & (LEFT_CTRL_PRESSED | RIGHT_CTRL_PRESSED))
+				flt_cutoff_env -= 12.0f;
+			else
+				flt_cutoff_env -= 1.0f;
+			break;
+		}
+		break;
+
+	case VK_RIGHT:
+		switch (menu_item[MENU_FLT])
+		{
+		case 0:
+			flt_enable = true;
+			break;
+		case 1:
+			if (modifiers & SHIFT_PRESSED)
+				flt_resonance += 256.f / 256.0f;
+			else if (modifiers & (LEFT_CTRL_PRESSED | RIGHT_CTRL_PRESSED))
+				flt_resonance += 16.0f / 256.0f;
+			else
+				flt_resonance += 1.0f / 256.0f;
+			if (flt_resonance > 10.0f)
+				flt_resonance = 10.0f;
+			break;
+		case 2:
+			if (modifiers & (LEFT_CTRL_PRESSED | RIGHT_CTRL_PRESSED))
+				flt_cutoff += 12.0f;
+			else
+				flt_cutoff += 1.0f;
+			break;
+		case 3:
+			if (modifiers & (LEFT_CTRL_PRESSED | RIGHT_CTRL_PRESSED))
+				flt_cutoff_lfo += 12.0f;
+			else
+				flt_cutoff_lfo += 1.0f;
+			break;
+		case 4:
+			if (modifiers & (LEFT_CTRL_PRESSED | RIGHT_CTRL_PRESSED))
+				flt_cutoff_env += 12.0f;
+			else
+				flt_cutoff_env += 1.0f;
+			break;
+		}
+		break;
+	}
+
+	FillConsoleOutputAttribute(hOut, menu_title_attrib[menu_active == MENU_FLT], 18, pos, &written);
+
+	for (int i = 0; i < 5; ++i)
+	{
+		COORD p = { pos.X, pos.Y + 1 + i };
+		FillConsoleOutputAttribute(hOut, menu_item_attrib[menu_active == MENU_FLT && menu_item[MENU_FLT] == i], 18, p, &written);
+	}
+
+	PrintConsole(hOut, pos, "F4 | FLT");
+
+	++pos.Y;
+	PrintConsole(hOut, pos, "Filter:       %3s", flt_enable ? "ON" : "off");
+
+	++pos.Y;
+	PrintConsole(hOut, pos, "Resonance:  %5.3f", flt_resonance);
+
+	++pos.Y;
+	PrintConsole(hOut, pos, "Cutoff:     %5.0f", flt_cutoff);
+
+	++pos.Y;
+	PrintConsole(hOut, pos, "Cutoff LFO: %5.0f", flt_cutoff_lfo);
+
+	++pos.Y;
+	PrintConsole(hOut, pos, "Cutoff ENV: %5.0f", flt_cutoff_env);
+}
+
 static void EnableEffect(int index)
 {
 	if (!fx[index])
@@ -822,7 +1200,7 @@ void MenuFX(HANDLE hOut, WORD key, DWORD modifiers)
 		break;
 	}
 
-	PrintConsole(hOut, pos, "F4 | FX");
+	PrintConsole(hOut, pos, "F5 | FX");
 	FillConsoleOutputAttribute(hOut, menu_title_attrib[menu_active == MENU_FX], 18, pos, &written);
 
 	for (int i = 0; i < ARRAY_SIZE(fx); ++i)
@@ -836,7 +1214,7 @@ void MenuFX(HANDLE hOut, WORD key, DWORD modifiers)
 typedef void(*MenuFunc)(HANDLE hOut, WORD key, DWORD modifiers);
 MenuFunc menufunc[MENU_COUNT] =
 {
-	MenuLFO, MenuOSC, MenuENV, MenuFX
+	MenuLFO, MenuOSC, MenuENV, MenuFLT, MenuFX
 };
 
 void Clear(HANDLE hOut)
@@ -860,6 +1238,15 @@ void main(int argc, char **argv)
 	HANDLE hIn = GetStdHandle(STD_INPUT_HANDLE);
 	HANDLE hOut = GetStdHandle(STD_OUTPUT_HANDLE);
 	int running = 1;
+
+#ifdef WIN32
+	if (IsDebuggerPresent())
+	{
+		// turn on floating-point exceptions
+		unsigned int prev;
+		_controlfp_s(&prev, 0, _EM_ZERODIVIDE|_EM_INVALID);
+	}
+#endif
 
 	// check the correct BASS was loaded
 	if (HIWORD(BASS_GetVersion()) != BASSVERSION)
@@ -935,10 +1322,12 @@ void main(int argc, char **argv)
 	}
 
 	PrintBufferSize(hOut, buflen);
+	PrintOutputScale(hOut);
 
 	MenuLFO(hOut, 0, 0);
 	MenuOSC(hOut, 0, 0);
 	MenuENV(hOut, 0, 0);
+	MenuFLT(hOut, 0, 0);
 	if (info.dsver >= 8)
 		MenuFX(hOut, 0, 0);
 
@@ -975,6 +1364,16 @@ void main(int argc, char **argv)
 					{
 						running = 0;
 						break;
+					}
+					else if (code == VK_F11)
+					{
+						output_scale -= 1.0f / 16.0f;
+						PrintOutputScale(hOut);
+					}
+					else if (code == VK_F12)
+					{
+						output_scale += 1.0f / 16.0f;
+						PrintOutputScale(hOut);
 					}
 					else if (code == VK_SUBTRACT || code == VK_ADD)
 					{
