@@ -18,6 +18,13 @@ HSTREAM stream; // the stream
 #define FILTER_NONLINEAR_MOOG 1
 #define FILTER 0
 
+#define SPECTRUM_WIDTH 80
+#define SPECTRUM_HEIGHT 8
+CHAR_INFO const bar_full = { 0, BACKGROUND_GREEN };
+CHAR_INFO const bar_top = { 223, BACKGROUND_GREEN | FOREGROUND_RED | FOREGROUND_GREEN | FOREGROUND_BLUE };
+CHAR_INFO const bar_bottom = { 220, BACKGROUND_BLUE | FOREGROUND_RED | FOREGROUND_GREEN | FOREGROUND_BLUE };
+CHAR_INFO const bar_empty = { 0, BACKGROUND_BLUE };
+
 // debug output
 int DebugPrint(const char *format, ...)
 {
@@ -90,7 +97,7 @@ WORD const keys[] = {
 	'Z', 'S', 'X', 'D', 'C', 'V', 'G', 'B', 'H', 'N', 'J', 'M',
 	'Q', '2', 'W', '3', 'E', 'R', '5', 'T', '6', 'Y', '7', 'U',
 };
-COORD const key_pos = { 0, 6 };
+COORD const key_pos = { 12, SPECTRUM_HEIGHT };
 //{
 //	{ 1, 5 }, { 2, 4 }, { 3, 5 }, { 4, 4 }, { 5, 5 }, { 7, 5 }, { 8, 4 }, { 9, 5 }, { 10, 4 }, { 11, 5 }, { 12, 4 }, { 13, 5 },
 //	{ 1, 2 }, { 2, 1 }, { 3, 2 }, { 4, 1 }, { 5, 2 }, { 7, 2 }, { 8, 1 }, { 9, 2 }, { 10, 1 }, { 11, 2 }, { 12, 1 }, { 13, 2 },
@@ -350,7 +357,7 @@ struct FilterState
 FilterState flt_state[KEYS];
 
 // output scale factor
-float output_scale = 1.0f;	// 0.25f;
+float output_scale = 0.25f;	// 0.25f;
 
 // from Atari800 pokey.c
 static void InitPoly(char aOut[], int aSize, int aTap, unsigned int aSeed, char aInvert)
@@ -825,7 +832,7 @@ DWORD CALLBACK WriteStream(HSTREAM handle, short *buffer, DWORD length, void *us
 		}
 
 		// left and right channels are the same
-		//short output = (short)Clamp(sample * output_scale * 32768, SHRT_MIN, SHRT_MAX);
+		//short output = (short)Clamp(int(sample * output_scale * 32768), SHRT_MIN, SHRT_MAX);
 		short output = (short)(tanhf(sample * output_scale) * 32768);
 		*buffer++ = output;
 		*buffer++ = output;
@@ -834,37 +841,26 @@ DWORD CALLBACK WriteStream(HSTREAM handle, short *buffer, DWORD length, void *us
 	return length;
 }
 
-void PrintBufferSize(HANDLE hOut, DWORD buflen)
-{
-	COORD pos = { 1, 8 };
-	PrintConsole(hOut, pos, " -   +  Buffer: %3dms", buflen);
-
-	DWORD written;
-	FillConsoleOutputAttribute(hOut, FOREGROUND_RED | FOREGROUND_GREEN | FOREGROUND_BLUE | BACKGROUND_RED, 3, pos, &written);
-	pos.X += 4;
-	FillConsoleOutputAttribute(hOut, FOREGROUND_RED | FOREGROUND_GREEN | FOREGROUND_BLUE | BACKGROUND_BLUE, 3, pos, &written);
-}
-
 void PrintOutputScale(HANDLE hOut)
 {
-	COORD pos = { 1, 9 };
-	PrintConsole(hOut, pos, "F11 F12 Output: %5.1f%%", output_scale * 100.0f);
+	COORD pos = { 1, 10 };
+	PrintConsole(hOut, pos, "- + Output: %5.1f%%", output_scale * 100.0f);
 
 	DWORD written;
-	FillConsoleOutputAttribute(hOut, FOREGROUND_RED | FOREGROUND_GREEN | FOREGROUND_BLUE | BACKGROUND_RED, 3, pos, &written);
-	pos.X += 4;
-	FillConsoleOutputAttribute(hOut, FOREGROUND_RED | FOREGROUND_GREEN | FOREGROUND_BLUE | BACKGROUND_BLUE, 3, pos, &written);
+	FillConsoleOutputAttribute(hOut, FOREGROUND_RED | FOREGROUND_GREEN | FOREGROUND_BLUE | BACKGROUND_RED, 1, pos, &written);
+	pos.X += 2;
+	FillConsoleOutputAttribute(hOut, FOREGROUND_RED | FOREGROUND_GREEN | FOREGROUND_BLUE | BACKGROUND_BLUE, 1, pos, &written);
 }
 
 void PrintKeyOctave(HANDLE hOut)
 {
-	COORD pos = { 1, 10 };
-	PrintConsole(hOut, pos, " [   ]  Key Octave: %d", keyboard_octave);
+	COORD pos = { 21, 10 };
+	PrintConsole(hOut, pos, "[ ] Key Octave: %d", keyboard_octave);
 
 	DWORD written;
-	FillConsoleOutputAttribute(hOut, FOREGROUND_RED | FOREGROUND_GREEN | FOREGROUND_BLUE | BACKGROUND_RED, 3, pos, &written);
-	pos.X += 4;
-	FillConsoleOutputAttribute(hOut, FOREGROUND_RED | FOREGROUND_GREEN | FOREGROUND_BLUE | BACKGROUND_BLUE, 3, pos, &written);
+	FillConsoleOutputAttribute(hOut, FOREGROUND_RED | FOREGROUND_GREEN | FOREGROUND_BLUE | BACKGROUND_RED, 1, pos, &written);
+	pos.X += 2;
+	FillConsoleOutputAttribute(hOut, FOREGROUND_RED | FOREGROUND_GREEN | FOREGROUND_BLUE | BACKGROUND_BLUE, 1, pos, &written);
 }
 
 void MenuLFO(HANDLE hOut, WORD key, DWORD modifiers)
@@ -891,7 +887,7 @@ void MenuLFO(HANDLE hOut, WORD key, DWORD modifiers)
 		switch (menu_item[MENU_LFO])
 		{
 		case 0:
-			lfo_config.wavetype = Wave(lfo_config.wavetype + WAVE_COUNT + sign);
+			lfo_config.wavetype = Wave((lfo_config.wavetype + WAVE_COUNT + sign) % WAVE_COUNT);
 			lfo_state.phase = 0.0f;
 			lfo_state.loops = 0;
 			break;
@@ -1266,7 +1262,7 @@ static void DisableEffect(int index)
 void MenuFX(HANDLE hOut, WORD key, DWORD modifiers)
 {
 	char buf[64];
-	COORD pos = { 61, 1 };
+	COORD pos = { 61, 18 };
 	DWORD written;
 
 	switch (key)
@@ -1348,7 +1344,6 @@ void main(int argc, char **argv)
 	// set the window title
 	SetConsoleTitle(TEXT(title_text));
 
-#if 0
 	// set the console buffer size
 	static const COORD bufferSize = { 80, 50 };
 	SetConsoleScreenBufferSize(hOut, bufferSize);
@@ -1356,7 +1351,6 @@ void main(int argc, char **argv)
 	// set the console window size
 	static const SMALL_RECT windowSize = { 0, 0, 79, 49 };
 	SetConsoleWindowInfo(hOut, TRUE, &windowSize);
-#endif
 
 	// clear the window
 	Clear(hOut);
@@ -1412,7 +1406,6 @@ void main(int argc, char **argv)
 		WriteConsoleOutputCharacter(hOut, buf, 1, pos, &written);
 	}
 
-	PrintBufferSize(hOut, buflen);
 	PrintOutputScale(hOut);
 	PrintKeyOctave(hOut);
 
@@ -1454,30 +1447,15 @@ void main(int argc, char **argv)
 						running = 0;
 						break;
 					}
-					else if (code == VK_F11)
+					else if (code == VK_OEM_MINUS || code == VK_SUBTRACT)
 					{
 						output_scale -= 1.0f / 16.0f;
 						PrintOutputScale(hOut);
 					}
-					else if (code == VK_F12)
+					else if (code == VK_OEM_PLUS || code == VK_ADD)
 					{
 						output_scale += 1.0f / 16.0f;
 						PrintOutputScale(hOut);
-					}
-					else if (code == VK_SUBTRACT || code == VK_ADD)
-					{
-						// recreate stream with smaller/larger buffer
-						BASS_StreamFree(stream);
-						if (code == VK_SUBTRACT)
-							BASS_SetConfig(BASS_CONFIG_BUFFER, buflen - 1); // smaller buffer
-						else
-							BASS_SetConfig(BASS_CONFIG_BUFFER, buflen + 1); // larger buffer
-						buflen = BASS_GetConfig(BASS_CONFIG_BUFFER);
-						PrintBufferSize(hOut, buflen);
-						stream = BASS_StreamCreate(info.freq, 2, 0, (STREAMPROC*)WriteStream, 0);
-						// set effects on the new stream
-						for (r = 0; r < 9; r++) if (fx[r]) fx[r] = BASS_ChannelSetFX(stream, BASS_FX_DX8_CHORUS + r, 0);
-						BASS_ChannelPlay(stream, FALSE);
 					}
 					else if (code == VK_OEM_4)	// '['
 					{
@@ -1569,30 +1547,29 @@ void main(int argc, char **argv)
 			}
 		}
 
-		// compute spectrum
-#define SPECTRUM_WIDTH 60
-#define SPECTRUM_HEIGHT 6
+		// compute power spectrum
 		float fft[8192];
 		BASS_ChannelGetData(stream, fft, BASS_DATA_FFT16384); // get the FFT data
-		// i = f * FFT_SIZE * info.freq
-		// f = i * info.freq / FFT_SIZE
 		float const step = powf(2, 1.0f / 12.0f);
-		float freq = keyboard_frequency[0] * keyboard_timescale * ARRAY_SIZE(fft) * 2.0f / info.freq / sqrtf(step);
-		//float const step = powf(2, 2.0f / 12.0f);
-		//float freq = 16 * ARRAY_SIZE(fft) * 2.0f / info.freq / sqrtf(step);
+		float freq = 0.5f * keyboard_frequency[0] * keyboard_timescale * ARRAY_SIZE(fft) * 2.0f / info.freq / sqrtf(step);
 		int b0 = int(freq);
-		float specbuf[SPECTRUM_WIDTH];
+		float spectrum[SPECTRUM_WIDTH] = { 0 };
 		for (int x = 0; x < SPECTRUM_WIDTH; ++x)
 		{
 			freq *= step;
-			int const b1 = Min(int(freq), int(ARRAY_SIZE(fft) - 1));
+			int const b1 = Min(int(freq), int(ARRAY_SIZE(fft)));
 			float peak = 0.0f;
 			if (b0 == b1)
-				--b0;
-			float scale = 8192 / (b1 - b0);
+			{
+				if (b1 == ARRAY_SIZE(fft))
+					break;
+				else
+					--b0;
+			}
+			float scale = 16.0f * 8192.0f / (b1 - b0);
 			for (; b0 < b1; ++b0)
 				peak += fft[b0] * fft[b0];
-			specbuf[x] = scale * peak;
+			spectrum[x] = scale * peak;
 		}
 
 		// draw spectrum
@@ -1600,20 +1577,16 @@ void main(int argc, char **argv)
 		COORD const pos = { 0, 0 };
 		COORD const size = { SPECTRUM_WIDTH, SPECTRUM_HEIGHT };
 		SMALL_RECT region = { pos.X, pos.Y, pos.X + size.X - 1, pos.Y + size.Y - 1 };
-		float threshold = 0.25f;
-		CHAR_INFO const bar_full = { 0, BACKGROUND_RED };
-		CHAR_INFO const bar_top = { 223, BACKGROUND_RED | FOREGROUND_RED | FOREGROUND_GREEN | FOREGROUND_BLUE };
-		CHAR_INFO const bar_bottom = { 220, FOREGROUND_RED | FOREGROUND_GREEN | FOREGROUND_BLUE };
-		CHAR_INFO const bar_empty = { 0, 0 };
+		float threshold = 1.0f;
 		for (int y = 0; y < SPECTRUM_HEIGHT; ++y)
 		{
 			for (int x = 0; x < SPECTRUM_WIDTH; ++x)
 			{
-				if (specbuf[x] < threshold)
+				if (spectrum[x] < threshold)
 					buf[y][x] = bar_empty;
-				else if (specbuf[x] < threshold * 2.0f)
+				else if (spectrum[x] < threshold * 2.0f)
 					buf[y][x] = bar_bottom;
-				else if (specbuf[x] < threshold * 4.0f)
+				else if (spectrum[x] < threshold * 4.0f)
 					buf[y][x] = bar_top;
 				else
 					buf[y][x] = bar_full;
@@ -1633,8 +1606,8 @@ void main(int argc, char **argv)
 				WriteConsoleOutputAttribute(hOut, &env_attrib[vol_env_display[k]], 1, pos, &written);
 			}
 		}
-		
-		Sleep(50);
+
+		Sleep(16);
 	}
 
 	// clear the window
