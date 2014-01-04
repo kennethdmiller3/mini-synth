@@ -441,9 +441,13 @@ public:
 		COUNT
 	};
 	Mode mode;
+
+	// cutoff frequency (logarithmic)
 	float cutoff_base;
 	float cutoff_lfo;
 	float cutoff_env;
+
+	// resonance parameter
 	float resonance;
 
 	FilterConfig(Mode const mode, float const cutoff_base, float const cutoff_lfo, float const cutoff_env, float const resonance)
@@ -482,25 +486,86 @@ const char * const filter_name[FilterConfig::COUNT] =
 	"Phase + Low 1",
 };
 
+// The Oberheim Xpander and Matrix-12 analog synthesizers use a typical four-
+// stage low-pass filter but combine voltages from each stage to produce 15
+// different filter modes.  The publication describing the Improved Moog Filter
+// mentioned this but gave no details.
+
+// The circuit diagram on page 4 of the Oberheim Matrix-12 Service Manual
+// shows how the filter works:
+// http://elektrotanya.com/oberheim_matrix-12_sm.pdf/download.html
+
+// The first three bits of the filter mode select one of eight resistor
+// networks that combine the stage voltages in various ways.  The fourth
+// bit disables the first filter stage.
+
+// The mixing values below were derived from the resistor networks in the
+// circuit diagram.  The IIR digital filter has an additional stage output
+// to work with and no hard restriction on the number of options so there
+// are several more filter options here than on the Oberheim synthesizers.
+
+// Also: http://www.kvraudio.com/forum/viewtopic.php?p=3821632
+
+// LP(n) = y[n]
+// LP(n), HP(1) = y[n + 1] - y[n]
+// LP(n), HP(2) = -y[n + 2] + 2 * y[n + 1] - y[n]
+// LP(n), HP(3) = y[n + 3] + 3 * y[n + 2] + 3 * y[n + 1] - y[n]
+// LP(n), HP(4) = -y[n + 4] + 4 * y[n + 3] - 6 * y[n + 2] + 4 * y[n + 1] - y[n]
+// BP(1) = LP(1), HP(1)
+// BP(2) = LP(2), HP(2)
+// Notch = HP(2) - LP(2)
+// AP = 4 * y[3] - 6 * y[2] + 3*y[1] - y[0] = HP(4) + LP(4) - LP(2) ?
+
+// filter stage coefficients for each filter mode
+float const filter_mix[FilterConfig::COUNT][5] =
+{
+	//y0  y1  y2  y3  y4 
+	{  0,  0,  0,  0,  0 }, // NONE,
+	{  1,  0,  0,  0,  0 },	// PEAK,					// input with feedback term
+	{  0,  1,  0,  0,  0 }, // LOWPASS_1,
+	{  0,  0,  1,  0,  0 }, // LOWPASS_2,
+	{  0,  0,  0,  1,  0 }, // LOWPASS_3,
+	{  0,  0,  0,  0,  1 }, // LOWPASS_4,
+	{ -1,  1,  0,  0,  0 }, // HIGHPASS_1,
+	{ -1,  2, -1,  0,  0 }, // HIGHPASS_2,
+	{ -1,  3, -3,  1,  0 }, // HIGHPASS_3,
+	{ -1,  4, -6,  4, -1 }, // HIGHPASS_4,
+	{  0, -1,  1,  0,  0 }, // BANDPASS_1,				// LP(1) then HP(1)
+	{  0,  0, -1,  1,  0 }, // BANDPASS_1_LOWPASS_1,	// LP(2) then HP(1)
+	{  0,  0,  0, -1,  1 }, // BANDPASS_1_LOWPASS_2,	// LP(3) then HP(1)
+	{  0, -1,  2, -1,  0 }, // BANDPASS_1_HIGHPASS_1,	// LP(1) then HP(2)
+	{  0, -1,  3, -3,  1 }, // BANDPASS_1_HIGHPASS_2,	// LP(1) then HP(3)
+	{  0,  0, -1,  2, -1 }, // BANDPASS_2,				// LP(2) then HP(2)
+	{ -1,  2, -2,  0,  0 }, // NOTCH,					// HP(2) * LP(2)
+	{  0, -1,  2, -2,  0 }, // NOTCH_LOWPASS_1,			// LP(1) then HP(2) * LP(2)
+	{  0,  0, -1,  2, -2 }, // NOTCH_LOWPASS_2,			// LP(2) then HP(2) * LP(2)
+	{ -1,  3, -6,  4,  0 }, // PHASESHIFT,
+	{  0, -1,  3, -6,  4 }, // PHASESHIFT_LOWPASS_1,
+};
+
 // filter state
 class FilterState
 {
 public:
+	// feedback coefficient
+	float feedback;
+
 #if FILTER == FILTER_NONLINEAR_MOOG
 
 #define FILTER_OVERSAMPLE 2
 
-	float feedback;
+	// output delayed by half a sample for phase compensation
+	float delayed;
+
+	// tuning coefficient
 	float tune;
-	float ytan[4];
-	float y[5];
+
+	// nonlinear output values from each stage
+	float z[6];
 
 #else
 
 #define FILTER_OVERSAMPLE 2
-
-	// feedback coefficient
-	float feedback;
 
 	// filter stage IIR coefficients
 	// H(z) = (b0 * z + b1) / (z + a1)
@@ -510,14 +575,14 @@ public:
 	// X(z) = 1 + a1 * z^-1
 	// (1 + a1 * z^-1) * Y(z) = (b0 + b1 * z^-1) * X(z)
 	// y[n] + a1 * y[n - 1] = b0 * x[n] + b1 * x[n - 1]
-	// y[n] = b0 * x[n] + b1 * 0.3 * x[n-1] - a1 * y[n-1]
+	// y[n] = b0 * x[n] + b1 * x[n-1] - a1 * y[n-1]
 	float b0, b1, a1;
 
-	// output values from each stage
+#endif
+
+	// linear output values from each stage
 	// (y[0] is input to the first stage)
 	float y[5];
-
-#endif
 
 	FilterState()
 	{
@@ -525,7 +590,7 @@ public:
 	}
 	void Clear(void);
 	void Setup(float const cutoff, float const resonance, float const step);
-	float Apply(float const input);
+	float Apply(float const input, float const mix[]);
 	float Update(FilterConfig const &config, float const cutoff, float const input, float const step);
 };
 FilterState flt_state[KEYS];
@@ -948,16 +1013,15 @@ float EnvelopeState::Update(EnvelopeConfig const &config, float const step)
 
 void FilterState::Clear()
 {
+	feedback = 0.0f;
 #if FILTER == FILTER_NONLINEAR_MOOG
-	feedback = 0.0f;
+	delayed = 0.0f;
 	tune = 0.0f;
-	memset(ytan, 0, sizeof(ytan));
-	memset(y, 0, sizeof(y));
+	memset(z, 0, sizeof(z));
 #else
-	feedback = 0.0f;
 	a1 = 0.0f; b0 = 0.0f; b1 = 0.0f;
-	memset(y, 0, sizeof(y));
 #endif
+	memset(y, 0, sizeof(y));
 }
 
 void FilterState::Setup(float const cutoff, float const resonance, float const step)
@@ -992,7 +1056,7 @@ void FilterState::Setup(float const cutoff, float const resonance, float const s
 #endif
 }
 
-float FilterState::Apply(float input)
+float FilterState::Apply(float const input, float const mix[])
 {
 #if FILTER == FILTER_IMPROVED_MOOG
 
@@ -1030,33 +1094,49 @@ float FilterState::Apply(float input)
 		y[4] = b0 * y[3] + b1 * t[3] - a1 * y[4];
 	}
 
-	return y[4];
+	// generate output by mixing stage values
+	return 
+		y[0] * mix[0] + 
+		y[1] * mix[1] + 
+		y[2] * mix[2] + 
+		y[3] * mix[3] + 
+		y[4] * mix[4];
 
 #elif FILTER == FILTER_NONLINEAR_MOOG
 
-	// feedback
-	float const in = input - feedback * y[4];
-
+	// modified original algorithm based on sample code here:
+	// http://www.kvraudio.com/forum/viewtopic.php?p=3821632
 	float output;
 #if FILTER_OVERSAMPLE > 1
 	for (int i = 0; i < FILTER_OVERSAMPLE; ++i)
 #endif
 	{
-		float last_stage = y[4];
+		// nonlinear feedback
+		y[0] = input - feedback * delayed;
+		z[0] = FastTanh(y[0] * 0.8192f);
 
-		y[0] = in;
-		ytan[0] = FastTanh(y[0] * 0.8192f);
-		y[1] += tune * (ytan[0] - ytan[1]);
-		ytan[1] = FastTanh(y[1] * 0.8192f);
-		y[2] += tune * (ytan[1] - ytan[2]);
-		ytan[2] = FastTanh(y[2] * 0.8192f);
-		y[3] += tune * (ytan[2] - ytan[3]);
-		ytan[3] = FastTanh(y[3] * 0.8192f);
-		y[4] += tune * (ytan[3] - FastTanh(y[4] * 0.8192f));
+		// nonlinear four-pole low-pass filter
+		y[1] += tune * (z[0] - z[1]);
+		z[1] = FastTanh(y[1] * 0.8192f);
+		y[2] += tune * (z[1] - z[2]);
+		z[2] = FastTanh(y[2] * 0.8192f);
+		y[3] += tune * (z[2] - z[3]);
+		z[3] = FastTanh(y[3] * 0.8192f);
+		y[4] += tune * (z[3] - z[4]);
+		z[4] = FastTanh(y[4] * 0.8192f);
 
-		output = 0.5f * (y[4] + last_stage);
+		// half-sample delay for phase compensation
+		delayed = 0.5f * (z[4] + z[5]);
+		z[5] = z[4];
 	}
-	return output;
+
+	// generate output by mixing stage values
+	return
+		z[0] * mix[0] +
+		z[1] * mix[1] +
+		z[2] * mix[2] +
+		z[3] * mix[3] +
+		z[4] * mix[4];
 
 #endif
 }
@@ -1067,103 +1147,7 @@ float FilterState::Update(FilterConfig const &config, float const cutoff, float 
 	Setup(cutoff, flt_config.resonance, step);
 
 	// apply the filter
-	Apply(input);
-
-	// The Oberheim Xpander and Matrix-12 analog synthesizers use a typical four-
-	// stage low-pass filter but combine voltages from each stage to produce 15
-	// different filter modes.  The publication describing the Improved Moog Filter
-	// mentioned this but gave no details.
-	
-	// The circuit diagram on page 4 of the Oberheim Matrix-12 Service Manual
-	// shows how the filter works:
-	// http://elektrotanya.com/oberheim_matrix-12_sm.pdf/download.html
-
-	// The first three bits of the filter mode select one of eight resistor
-	// networks that combine the stage voltages in various ways.  The fourth
-	// bit disables the first filter stage.
-
-	// The mixing values below were derived from the resistor networks in the
-	// circuit diagram.  The IIR digital filter has an additional stage output
-	// to work with and no hard restriction on the number of options so there
-	// are several more filter options here than on the Oberheim synthesizers.
-
-	// LP(n) = y[n]
-	// LP(n), HP(1) = y[n + 1] - y[n]
-	// LP(n), HP(2) = -y[n + 2] + 2 * y[n + 1] - y[n]
-	// LP(n), HP(3) = y[n + 3] + 3 * y[n + 2] + 3 * y[n + 1] - y[n]
-	// LP(n), HP(4) = -y[n + 4] + 4 * y[n + 3] - 6 * y[n + 2] + 4 * y[n + 1] - y[n]
-	// BP(1) = LP(1), HP(1)
-	// BP(2) = LP(2), HP(2)
-	// Notch = HP(2) - LP(2)
-	// AP = 4 * y[3] - 6 * y[2] + 3*y[1] - y[0] = HP(4) + LP(4) - LP(2) ?
-
-	// generate output based on filter mode
-	float value;
-	switch (flt_config.mode)
-	{
-	default:
-	case FilterConfig::PEAK:
-		value = y[0];
-		break;
-	case FilterConfig::LOWPASS_1:
-		value = y[1];
-		break;
-	case FilterConfig::LOWPASS_2:
-		value = y[2];
-		break;
-	case FilterConfig::LOWPASS_3:
-		value = y[3];
-		break;
-	case FilterConfig::LOWPASS_4:
-		value = y[4];
-		break;
-	case FilterConfig::HIGHPASS_1:
-		value = y[1] - y[0];
-		break;
-	case FilterConfig::HIGHPASS_2:
-		value = -y[2] + 2 * y[1] - y[0];
-		break;
-	case FilterConfig::HIGHPASS_3:
-		value = y[3] - 3 * y[2] + 3 * y[1] - y[0];
-		break;
-	case FilterConfig::HIGHPASS_4:
-		value = -y[4] + 4 * y[3] - 6 * y[2] + 4 * y[1] - y[0];
-		break;
-	case FilterConfig::BANDPASS_1:				// LP(1), HP(1)
-		value = y[2] - y[1];
-		break;
-	case FilterConfig::BANDPASS_1_LOWPASS_1:	// LP(2), HP(1)
-		value = y[3] - y[2];
-		break;
-	case FilterConfig::BANDPASS_1_LOWPASS_2:	// LP(3), HP(1)
-		value = y[4] - y[3];
-		break;
-	case FilterConfig::BANDPASS_1_HIGHPASS_1:	// LP(1), HP(2)
-		value = -y[3] + 2 * y[2] - y[1];
-		break;
-	case FilterConfig::BANDPASS_1_HIGHPASS_2:	// LP(1), HP(3)
-		value = y[4] - 3 * y[3] + 3 * y[2] - y[1];
-		break;
-	case FilterConfig::BANDPASS_2:				// LP(2), HP(2)
-		value = y[4] - 2 * y[3] + y[2];
-		break;
-	case FilterConfig::NOTCH:					// HP(2) - LP(2)
-		value = -2 * y[2] + 2 * y[1] - y[0];
-		break;
-	case FilterConfig::NOTCH_LOWPASS_1:
-		value = -2 * y[3] + 2 * y[2] - y[1];
-		break;
-	case FilterConfig::NOTCH_LOWPASS_2:
-		value = -2 * y[4] + 2 * y[3] - y[2];
-		break;
-	case FilterConfig::PHASESHIFT:
-		value = 4 * y[3] - 6 * y[2] + 3 * y[1] - y[0];
-		break;
-	case FilterConfig::PHASESHIFT_LOWPASS_1:
-		value = 4 * y[4] - 6 * y[3] + 3 * y[2] - y[1];
-		break;
-	}
-	return value;
+	return Apply(input, filter_mix[flt_config.mode]);
 }
 
 DWORD CALLBACK WriteStream(HSTREAM handle, short *buffer, DWORD length, void *user)
