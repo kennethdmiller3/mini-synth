@@ -337,7 +337,6 @@ public:
 	}
 };
 NoteOscillatorConfig osc_config[NUM_OSCILLATORS];
-// TO DO: multiple oscillators
 // TO DO: hard sync
 // TO DO: keyboard follow dial?
 // TO DO: oscillator mixer
@@ -803,6 +802,8 @@ float OscillatorPoly(OscillatorConfig const &config, OscillatorState &state, cha
 	state.index += state.advance;
 	if (state.index >= cycle)
 		state.index -= cycle;
+	else if (state.index < 0)
+		state.index += cycle;
 	state.advance = 0;
 
 	// current wavetable value
@@ -1249,7 +1250,7 @@ DWORD CALLBACK WriteStream(HSTREAM handle, short *buffer, DWORD length, void *us
 			float flt_value;
 			if (flt_config.mode)
 			{
-				// compute cutoff parameter
+				// compute cutoff frequency
 				// (assume key follow)
 				float const cutoff = key_freq * powf(2, flt_config.cutoff_base + flt_config.cutoff_lfo * lfo + flt_config.cutoff_env * flt_env_amplitude);
 
@@ -1885,12 +1886,63 @@ void UpdateOscillatorWaveformDisplay(HANDLE hOut)
 
 	// local filter for plot
 	static FilterState filter;
-	if (vol_env_state[k].state == EnvelopeState::OFF)
-		filter.Clear();
 
-	// compute cutoff parameter
+	// compute cutoff frequency
 	// (assume key follow)
-	float const cutoff = powf(2, flt_config.cutoff_base + flt_config.cutoff_lfo * lfo + flt_config.cutoff_env * flt_env_amplitude) * delta_base;
+	float const cutoff = powf(2, flt_config.cutoff_base + flt_config.cutoff_lfo * lfo + flt_config.cutoff_env * flt_env_amplitude);
+
+	// elapsed time in milliseconds since the previous frame
+	static DWORD prevTime = timeGetTime();
+	DWORD deltaTime = timeGetTime() - prevTime;
+	prevTime += deltaTime;
+
+	// clear filter state if the volume is off
+	if (vol_env_state[k].state == EnvelopeState::OFF)
+	{
+		filter.Clear();
+	}
+	// if the filter is enabled...
+	else if (flt_config.mode)
+	{
+		// get steps needed to advance OSC1 by the time step
+		// (subtracting the steps that the plot itself will take)
+		int steps = int(key_freq * osc_config[0].frequency * deltaTime / 1000 - 1) * WAVEFORM_WIDTH;
+		if (steps > 0)
+		{
+			// "rewind" oscillators so they'll end at zero phase
+			for (int o = 0; o < NUM_OSCILLATORS; ++o)
+			{
+				state[o].phase -= step[o] * steps;
+				int const advance = int(state[o].phase) + (state[o].phase < 0);	// int() rounds negative values towards zero
+				state[o].phase -= advance;
+				int const cycle = wave_loop_cycle[config[o].wavetype];
+				state[o].index = (state[o].index + advance) % cycle;
+				if (state[o].index < 0)
+					state[o].index += cycle;	// modulo of a negative value is negative
+			}
+
+			// run the filter ahead for next time
+			for (int x = 0; x < steps; ++x)
+			{
+				// sum the oscillator outputs
+				float value = 0.0f;
+				for (int o = 0; o < NUM_OSCILLATORS; ++o)
+				{
+					value += vol_env_amplitude * config[o].amplitude * oscillator[config[o].wavetype](config[o], state[o], delta[o]);
+
+					state[o].phase += step[o];
+					if (state[o].phase >= 1.0f)
+					{
+						state[o].advance = int(state[o].phase);
+						state[o].phase -= state[o].advance;
+					}
+				}
+
+				// apply filter
+				value = filter.Update(flt_config, cutoff, value, step_base);
+			}
+		}
+	}
 
 #ifdef SCROLL_WAVEFORM_DISPLAY
 	// scroll through the waveform
@@ -1926,7 +1978,7 @@ void UpdateOscillatorWaveformDisplay(HANDLE hOut)
 		if (flt_config.mode)
 		{
 			// apply filter
-			value = filter.Update(flt_config, cutoff, value, 1.0f);
+			value = filter.Update(flt_config, cutoff, value, step_base);
 		}
 
 		// plot waveform column
