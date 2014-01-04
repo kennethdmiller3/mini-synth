@@ -1,4 +1,4 @@
-/*
+﻿/*
 MINI VIRTUAL ANALOG SYNTHESIZER
 Copyright 2014 Kenneth D. Miller III
 */
@@ -29,6 +29,8 @@ CHAR_INFO const bar_top = { 223, BACKGROUND_GREEN | FOREGROUND_RED | FOREGROUND_
 CHAR_INFO const bar_bottom = { 220, BACKGROUND_BLUE | FOREGROUND_RED | FOREGROUND_GREEN | FOREGROUND_BLUE };
 CHAR_INFO const bar_empty = { 0, BACKGROUND_BLUE };
 CHAR_INFO const bar_nyquist = { 0, BACKGROUND_RED };
+
+#define NUM_OSCILLATORS 2
 
 // debug output
 int DebugPrint(const char *format, ...)
@@ -174,8 +176,9 @@ WORD const menu_item_attrib[] =
 // menu modes
 enum MenuMode
 {
+	MENU_OSC1,
+	MENU_OSC2,
 	MENU_LFO,
-	MENU_OSC,
 	MENU_FLT,
 	MENU_VOL,
 	MENU_FX,
@@ -184,10 +187,21 @@ enum MenuMode
 };
 
 // selected menu
-MenuMode menu_active = MENU_OSC;
+MenuMode menu_active = MENU_OSC1;
 
 // selected item in each menu
 int menu_item[MENU_COUNT];
+
+// position of each menu
+COORD const menu_pos[MENU_COUNT] =
+{
+	{ 1, 12 },	// MENU_OSC1,
+	{ 21, 12 },	// MENU_OSC2,
+	{ 41, 12 },	// MENU_LFO,
+	{ 41, 18 },	// MENU_FLT,
+	{ 61, 12 },	// MENU_VOL,
+	{ 61, 18 },	// MENU_FX,
+};
 
 char const * const fx_name[9] =
 {
@@ -203,6 +217,9 @@ float keyboard_frequency[KEYS];
 // keyboard octave
 int keyboard_octave = 4;
 float keyboard_timescale = 1.0f;
+
+// most recent note key pressed
+int keyboard_most_recent = 0;
 
 // oscillator wave types
 enum Wave
@@ -234,43 +251,56 @@ static char poly4poly5[ARRAY_SIZE(poly5) * ARRAY_SIZE(poly4)];
 static char poly17poly5[ARRAY_SIZE(poly5) * ARRAY_SIZE(poly17)];
 
 // oscillator update functions
-struct OscillatorConfig;
-struct OscillatorState;
+class OscillatorConfig;
+class OscillatorState;
 typedef float(*OscillatorFunc)(OscillatorConfig const &config, OscillatorState &state, float step);
 
 
 // base frequency oscillator configuration
-struct OscillatorConfig
+class OscillatorConfig
 {
+public:
 	Wave wavetype;
 	float waveparam;
 	float frequency;
 	float amplitude;
 
-	OscillatorConfig()
-		: wavetype(WAVE_SINE)
-		, waveparam(0.5f)
-		, frequency(1.0f)
-		, amplitude(1.0f)
+	OscillatorConfig(Wave const wavetype, float const waveparam, float const frequency, float const amplitude)
+		: wavetype(wavetype)
+		, waveparam(waveparam)
+		, frequency(frequency)
+		, amplitude(amplitude)
 	{
 	}
 };
 
 // oscillator state
-struct OscillatorState
+class OscillatorState
 {
+public:
 	float phase;
 	int advance;
 	int index;
 
+	OscillatorState()
+	{
+		Reset();
+	}
 	void Reset();
 	float Update(OscillatorConfig const &config, float frequency, float const step);
 };
 
 // low-frequency oscillator configuration
-struct LFOOscillatorConfig : public OscillatorConfig
+class LFOOscillatorConfig : public OscillatorConfig
 {
+public:
 	float frequency_base;	// logarithmic offset from 1 Hz
+
+	explicit LFOOscillatorConfig(Wave const wavetype = WAVE_SINE, float const waveparam = 0.5f, float const frequency = 1.0f, float const amplitude = 1.0f)
+		: OscillatorConfig(wavetype, waveparam, frequency, amplitude)
+		, frequency_base(0.0f)
+	{
+	}
 };
 LFOOscillatorConfig lfo_config;
 // TO DO: multiple LFOs?
@@ -282,8 +312,9 @@ LFOOscillatorConfig lfo_config;
 OscillatorState lfo_state;
 
 // note oscillator configuration
-struct NoteOscillatorConfig : public OscillatorConfig
+class NoteOscillatorConfig : public OscillatorConfig
 {
+public:
 	// base parameters
 	float waveparam_base;
 	float frequency_base;	// logarithmic offset
@@ -294,41 +325,50 @@ struct NoteOscillatorConfig : public OscillatorConfig
 	float frequency_lfo;
 	float amplitude_lfo;
 
-	NoteOscillatorConfig()
-		: OscillatorConfig()
-		, waveparam_base(0.5f)
+	explicit NoteOscillatorConfig(Wave const wavetype = WAVE_SAWTOOTH, float const waveparam = 0.5f, float const frequency = 1.0f, float const amplitude = 0.0f)
+		: OscillatorConfig(wavetype, waveparam, frequency, amplitude)
+		, waveparam_base(waveparam)
 		, frequency_base(0.0f)
-		, amplitude_base(1.0f)
+		, amplitude_base(amplitude)
 		, waveparam_lfo(0.0f)
 		, frequency_lfo(0.0f)
 		, amplitude_lfo(0.0f)
 	{
-		wavetype = WAVE_SAWTOOTH;
 	}
 };
-NoteOscillatorConfig osc_config;
+NoteOscillatorConfig osc_config[NUM_OSCILLATORS];
 // TO DO: multiple oscillators
 // TO DO: hard sync
 // TO DO: keyboard follow dial?
 // TO DO: oscillator mixer
 
 // note oscillator state
-OscillatorState osc_state[KEYS];
+OscillatorState osc_state[KEYS][NUM_OSCILLATORS];
 
 // envelope generator configuration
-struct EnvelopeConfig
+class EnvelopeConfig
 {
+public:
 	float attack_rate;
 	float decay_rate;
 	float sustain_level;
 	float release_rate;
+
+	EnvelopeConfig(float const attack_rate, float const decay_rate, float const sustain_level, float const release_rate)
+		: attack_rate(attack_rate)
+		, decay_rate(decay_rate)
+		, sustain_level(sustain_level)
+		, release_rate(release_rate)
+	{
+	}
 };
-EnvelopeConfig flt_env_config = { 256.0f, 16.0f, 0.0f, 256.0f };
-EnvelopeConfig vol_env_config = { 256.0f, 16.0f, 1.0f, 256.0f };
+EnvelopeConfig flt_env_config(256.0f, 16.0f, 0.0f, 256.0f);
+EnvelopeConfig vol_env_config(256.0f, 16.0f, 1.0f, 256.0f);
 
 // envelope generator state
-struct EnvelopeState
+class EnvelopeState
 {
+public:
 	bool gate;
 	enum State
 	{
@@ -343,6 +383,13 @@ struct EnvelopeState
 	};
 	State state;
 	float amplitude;
+
+	EnvelopeState()
+		: gate(false)
+		, state(OFF)
+		, amplitude(0.0f)
+	{
+	}
 
 	float Update(EnvelopeConfig const &config, float const step);
 };
@@ -364,12 +411,13 @@ WORD const env_attrib[EnvelopeState::COUNT] =
 
 
 // resonant lowpass filter
-struct FilterConfig
+class FilterConfig
 {
+public:
 	enum Mode
 	{
 		NONE,
-		ALLPASS,
+		PEAK,
 		LOWPASS_1,
 		LOWPASS_2,
 		LOWPASS_3,
@@ -378,30 +426,66 @@ struct FilterConfig
 		HIGHPASS_2,
 		HIGHPASS_3,
 		HIGHPASS_4,
-		BANDPASS,
+		BANDPASS_1,
+		BANDPASS_1_LOWPASS_1,
+		BANDPASS_1_LOWPASS_2,
+		BANDPASS_1_HIGHPASS_1,
+		BANDPASS_1_HIGHPASS_2,
+		BANDPASS_2,
 		NOTCH,
+		NOTCH_LOWPASS_1,
+		NOTCH_LOWPASS_2,
+		PHASESHIFT,
+		PHASESHIFT_LOWPASS_1,
 
 		COUNT
 	};
 	Mode mode;
-	float cutoff;
+	float cutoff_base;
 	float cutoff_lfo;
 	float cutoff_env;
 	float resonance;
+
+	FilterConfig(Mode const mode, float const cutoff_base, float const cutoff_lfo, float const cutoff_env, float const resonance)
+		: mode(mode)
+		, cutoff_base(cutoff_base)
+		, cutoff_lfo(cutoff_lfo)
+		, cutoff_env(cutoff_env)
+		, resonance(resonance)
+	{
+	}
 };
-FilterConfig flt_config = { FilterConfig::NONE, 0.0f, 0.0f, 0.0f, 0.0f };
+FilterConfig flt_config(FilterConfig::NONE, 0.0f, 0.0f, 0.0f, 0.0f);
 
 const char * const filter_name[FilterConfig::COUNT] =
 {
-	"None", "All-Pass",
-	"Low-Pass 1", "Low-Pass 2", "Low-Pass 3", "Low-Pass 4",
-	"High-Pass 1", "High-Pass 2", "High-Pass 3", "High-Pass 4",
-	"Band-Pass", "Notch"
+	"None",
+	"Peak",
+	"Low-Pass 1",
+	"Low-Pass 2",
+	"Low-Pass 3",
+	"Low-Pass 4",
+	"High-Pass 1",
+	"High-Pass 2",
+	"High-Pass 3",
+	"High-Pass 4",
+	"Band-Pass 1",
+	"Band 1 + Low 1",
+	"Band 1 + Low 2",
+	"Band 1 + High 1",
+	"Band 1 + High 2",
+	"Band-Pass 2",
+	"Notch",
+	"Notch + Low 1",
+	"Notch + Low 2",
+	"Phase Shift",
+	"Phase + Low 1",
 };
 
 // filter state
-struct FilterState
+class FilterState
 {
+public:
 #if FILTER == FILTER_NONLINEAR_MOOG
 
 #define FILTER_OVERSAMPLE 2
@@ -435,9 +519,14 @@ struct FilterState
 
 #endif
 
+	FilterState()
+	{
+		Clear();
+	}
 	void Clear(void);
-	void Setup(float cutoff, float resonance);
-	float Apply(float input);
+	void Setup(float const cutoff, float const resonance, float const step);
+	float Apply(float const input);
+	float Update(FilterConfig const &config, float const cutoff, float const input, float const step);
 };
 FilterState flt_state[KEYS];
 
@@ -871,15 +960,17 @@ void FilterState::Clear()
 #endif
 }
 
-void FilterState::Setup(float cutoff, float resonance)
+void FilterState::Setup(float const cutoff, float const resonance, float const step)
 {
+	//float const fn = FILTER_OVERSAMPLE * 0.5f * info.freq;
+	//float const fc = cutoff < fn ? cutoff / fn : 1.0f;
+	float const fc = cutoff * step * 2.0f / FILTER_OVERSAMPLE;
+
 #if FILTER == FILTER_IMPROVED_MOOG
 
 	// Based on Improved Moog Filter description
 	// http://www.music.mcgill.ca/~ich/research/misc/papers/cr1071.pdf
 
-	float const fn = FILTER_OVERSAMPLE * 0.5f * info.freq;
-	float const fc = cutoff < fn ? cutoff / fn : 1.0f;
 	float const g = 1 - expf(-M_PI * fc);
 	feedback = 4.0f * resonance;
 	// y[n] = ((1.0 / 1.3) * x[n] + (0.3 / 1.3) * x[n-1] - y[n-1]) * g + y[n-1]
@@ -893,8 +984,6 @@ void FilterState::Setup(float cutoff, float resonance)
 	// https://raw.github.com/ddiakopoulos/MoogLadders/master/Source/Huovilainen.cpp
 	// 0 <= resonance <= 1
 
-	float const fn = FILTER_OVERSAMPLE * 0.5f * info.freq;
-	float const fc = cutoff < fn ? cutoff / fn : 1.0f;
 	float const fcr = ((1.8730f * fc + 0.4955f) * fc + -0.6490f) * fc + 0.9988f;
 	float const acr = (-3.9364f * fc + 1.8409f) * fc + 0.9968f;
 	feedback = resonance * 4.0f * acr;
@@ -972,6 +1061,111 @@ float FilterState::Apply(float input)
 #endif
 }
 
+float FilterState::Update(FilterConfig const &config, float const cutoff, float const input, float const step)
+{
+	// compute filter values
+	Setup(cutoff, flt_config.resonance, step);
+
+	// apply the filter
+	Apply(input);
+
+	// The Oberheim Xpander and Matrix-12 analog synthesizers use a typical four-
+	// stage low-pass filter but combine voltages from each stage to produce 15
+	// different filter modes.  The publication describing the Improved Moog Filter
+	// mentioned this but gave no details.
+	
+	// The circuit diagram on page 4 of the Oberheim Matrix-12 Service Manual
+	// shows how the filter works:
+	// http://elektrotanya.com/oberheim_matrix-12_sm.pdf/download.html
+
+	// The first three bits of the filter mode select one of eight resistor
+	// networks that combine the stage voltages in various ways.  The fourth
+	// bit disables the first filter stage.
+
+	// The mixing values below were derived from the resistor networks in the
+	// circuit diagram.  The IIR digital filter has an additional stage output
+	// to work with and no hard restriction on the number of options so there
+	// are several more filter options here than on the Oberheim synthesizers.
+
+	// LP(n) = y[n]
+	// LP(n), HP(1) = y[n + 1] - y[n]
+	// LP(n), HP(2) = -y[n + 2] + 2 * y[n + 1] - y[n]
+	// LP(n), HP(3) = y[n + 3] + 3 * y[n + 2] + 3 * y[n + 1] - y[n]
+	// LP(n), HP(4) = -y[n + 4] + 4 * y[n + 3] - 6 * y[n + 2] + 4 * y[n + 1] - y[n]
+	// BP(1) = LP(1), HP(1)
+	// BP(2) = LP(2), HP(2)
+	// Notch = HP(2) - LP(2)
+	// AP = 4 * y[3] - 6 * y[2] + 3*y[1] - y[0] = HP(4) + LP(4) - LP(2) ?
+
+	// generate output based on filter mode
+	float value;
+	switch (flt_config.mode)
+	{
+	default:
+	case FilterConfig::PEAK:
+		value = y[0];
+		break;
+	case FilterConfig::LOWPASS_1:
+		value = y[1];
+		break;
+	case FilterConfig::LOWPASS_2:
+		value = y[2];
+		break;
+	case FilterConfig::LOWPASS_3:
+		value = y[3];
+		break;
+	case FilterConfig::LOWPASS_4:
+		value = y[4];
+		break;
+	case FilterConfig::HIGHPASS_1:
+		value = y[1] - y[0];
+		break;
+	case FilterConfig::HIGHPASS_2:
+		value = -y[2] + 2 * y[1] - y[0];
+		break;
+	case FilterConfig::HIGHPASS_3:
+		value = y[3] - 3 * y[2] + 3 * y[1] - y[0];
+		break;
+	case FilterConfig::HIGHPASS_4:
+		value = -y[4] + 4 * y[3] - 6 * y[2] + 4 * y[1] - y[0];
+		break;
+	case FilterConfig::BANDPASS_1:				// LP(1), HP(1)
+		value = y[2] - y[1];
+		break;
+	case FilterConfig::BANDPASS_1_LOWPASS_1:	// LP(2), HP(1)
+		value = y[3] - y[2];
+		break;
+	case FilterConfig::BANDPASS_1_LOWPASS_2:	// LP(3), HP(1)
+		value = y[4] - y[3];
+		break;
+	case FilterConfig::BANDPASS_1_HIGHPASS_1:	// LP(1), HP(2)
+		value = -y[3] + 2 * y[2] - y[1];
+		break;
+	case FilterConfig::BANDPASS_1_HIGHPASS_2:	// LP(1), HP(3)
+		value = y[4] - 3 * y[3] + 3 * y[2] - y[1];
+		break;
+	case FilterConfig::BANDPASS_2:				// LP(2), HP(2)
+		value = y[4] - 2 * y[3] + y[2];
+		break;
+	case FilterConfig::NOTCH:					// HP(2) - LP(2)
+		value = -2 * y[2] + 2 * y[1] - y[0];
+		break;
+	case FilterConfig::NOTCH_LOWPASS_1:
+		value = -2 * y[3] + 2 * y[2] - y[1];
+		break;
+	case FilterConfig::NOTCH_LOWPASS_2:
+		value = -2 * y[4] + 2 * y[3] - y[2];
+		break;
+	case FilterConfig::PHASESHIFT:
+		value = 4 * y[3] - 6 * y[2] + 3 * y[1] - y[0];
+		break;
+	case FilterConfig::PHASESHIFT_LOWPASS_1:
+		value = 4 * y[4] - 6 * y[3] + 3 * y[2] - y[1];
+		break;
+	}
+	return value;
+}
+
 DWORD CALLBACK WriteStream(HSTREAM handle, short *buffer, DWORD length, void *user)
 {
 	// get active oscillators
@@ -994,7 +1188,20 @@ DWORD CALLBACK WriteStream(HSTREAM handle, short *buffer, DWORD length, void *us
 		memset(buffer, 0, length);
 
 		// advance low-frequency oscillator
-		lfo_state.Update(lfo_config, 1.0f, float(count) / info.freq);
+		float lfo = lfo_state.Update(lfo_config, 1.0f, float(count) / info.freq);
+
+		// compute shared oscillator values
+		for (int o = 0; o < NUM_OSCILLATORS; ++o)
+		{
+			// LFO wave parameter modulation
+			osc_config[o].waveparam = osc_config[o].waveparam_base + osc_config[o].waveparam_lfo * lfo;
+
+			// LFO frequency modulation
+			osc_config[o].frequency = powf(2.0f, osc_config[o].frequency_base + osc_config[o].frequency_lfo * lfo) * wave_adjust_frequency[osc_config[o].wavetype];
+
+			// LFO amplitude modulation
+			osc_config[o].amplitude = osc_config[o].amplitude_base + osc_config[o].amplitude_lfo * lfo;
+		}
 
 		return length;
 	}
@@ -1008,14 +1215,18 @@ DWORD CALLBACK WriteStream(HSTREAM handle, short *buffer, DWORD length, void *us
 		// get low-frequency oscillator value
 		float const lfo = lfo_state.Update(lfo_config, 1.0f, step);
 
-		// LFO wave parameter modulation
-		osc_config.waveparam = osc_config.waveparam_base + osc_config.waveparam_lfo * lfo;
+		// compute shared oscillator values
+		for (int o = 0; o < NUM_OSCILLATORS; ++o)
+		{
+			// LFO wave parameter modulation
+			osc_config[o].waveparam = osc_config[o].waveparam_base + osc_config[o].waveparam_lfo * lfo;
 
-		// LFO frequency modulation
-		osc_config.frequency = powf(2.0f, osc_config.frequency_base + osc_config.frequency_lfo * lfo) * wave_adjust_frequency[osc_config.wavetype];
+			// LFO frequency modulation
+			osc_config[o].frequency = powf(2.0f, osc_config[o].frequency_base + osc_config[o].frequency_lfo * lfo) * wave_adjust_frequency[osc_config[o].wavetype];
 
-		// LFO amplitude modulation
-		osc_config.amplitude = osc_config.amplitude_base + osc_config.amplitude_lfo * lfo;
+			// LFO amplitude modulation
+			osc_config[o].amplitude = osc_config[o].amplitude_base + osc_config[o].amplitude_lfo * lfo;
+		}
 
 		// accumulated sample value
 		float sample = 0.0f;
@@ -1026,7 +1237,7 @@ DWORD CALLBACK WriteStream(HSTREAM handle, short *buffer, DWORD length, void *us
 			int k = index[i];
 
 			// key frequency (taking octave shift into account)
-			float key_freq = keyboard_frequency[k] * keyboard_timescale;
+			float const key_freq = keyboard_frequency[k] * keyboard_timescale;
 
 			// update filter envelope generator
 			float const flt_env_amplitude = flt_env_state[k].Update(flt_env_config, step);
@@ -1046,39 +1257,20 @@ DWORD CALLBACK WriteStream(HSTREAM handle, short *buffer, DWORD length, void *us
 
 			// update oscillator
 			// (assume key follow)
-			float const osc_value = osc_state[k].Update(osc_config, key_freq, step);
+			float osc_value = 0.0f;
+			for (int o = 0; o < NUM_OSCILLATORS; ++o)
+				osc_value += osc_state[k][o].Update(osc_config[o], key_freq, step);
 
+			// update filter
 			float flt_value;
 			if (flt_config.mode)
 			{
-				// compute cutoff frequency
+				// compute cutoff parameter
 				// (assume key follow)
-				float cutoff = key_freq * powf(2, flt_config.cutoff + flt_config.cutoff_lfo * lfo + flt_config.cutoff_env * flt_env_amplitude);
+				float const cutoff = key_freq * powf(2, flt_config.cutoff_base + flt_config.cutoff_lfo * lfo + flt_config.cutoff_env * flt_env_amplitude);
 
-				// compute filter values
-				flt_state[k].Setup(cutoff, flt_config.resonance);
-
-				// accumulate the filtered oscillator value
-#if 1
-				flt_state[k].Apply(osc_value);
-				switch (flt_config.mode)
-				{
-				default:
-				case FilterConfig::ALLPASS:		flt_value = flt_state[k].y[0]; break;
-				case FilterConfig::LOWPASS_1:	flt_value = flt_state[k].y[1]; break;
-				case FilterConfig::LOWPASS_2:	flt_value = flt_state[k].y[2]; break;
-				case FilterConfig::LOWPASS_3:	flt_value = flt_state[k].y[3]; break;
-				case FilterConfig::LOWPASS_4:	flt_value = flt_state[k].y[4]; break;
-				case FilterConfig::HIGHPASS_1:	flt_value = flt_state[k].y[0] - flt_state[k].y[4]; break;
-				case FilterConfig::HIGHPASS_2:	flt_value = flt_state[k].y[0] - flt_state[k].y[3]; break;
-				case FilterConfig::HIGHPASS_3:	flt_value = flt_state[k].y[0] - flt_state[k].y[2]; break;
-				case FilterConfig::HIGHPASS_4:	flt_value = flt_state[k].y[0] - flt_state[k].y[1]; break;
-				case FilterConfig::BANDPASS:	flt_value = 2.0f * (flt_state[k].y[4] - flt_state[k].y[2]); break;
-				case FilterConfig::NOTCH:		flt_value = 0.666667f * osc_value + (flt_state[k].y[4] - flt_state[k].y[2]); break;
-				}
-#else
-				flt_value = flt_state[k].Apply(osc_value);
-#endif
+				// get filtered oscillator value
+				flt_value = flt_state[k].Update(flt_config, cutoff, osc_value, step);
 			}
 			else
 			{
@@ -1162,9 +1354,102 @@ void UpdatePercentageProperty(float &property, int const sign, DWORD const modif
 	property = Clamp(value / 256.0f, minimum, maximum);
 }
 
+void MenuOSC(HANDLE hOut, WORD key, DWORD modifiers, MenuMode menu)
+{
+	int const o = menu - MENU_OSC1;
+	COORD pos = menu_pos[menu];
+	DWORD written;
+	int sign;
+
+	switch (key)
+	{
+	case VK_UP:
+		if (--menu_item[menu] < 0)
+			menu_item[menu] = 6;
+		break;
+
+	case VK_DOWN:
+		if (++menu_item[menu] > 6)
+			menu_item[menu] = 0;
+		break;
+
+	case VK_LEFT:
+	case VK_RIGHT:
+		sign = (key == VK_RIGHT) ? 1 : -1;
+		switch (menu_item[menu])
+		{
+		case 0:
+			osc_config[o].wavetype = Wave((osc_config[o].wavetype + WAVE_COUNT + sign) % WAVE_COUNT);
+			for (int k = 0; k < KEYS; ++k)
+				osc_state[k][o].Reset();
+			break;
+		case 1:
+			UpdatePercentageProperty(osc_config[o].waveparam_base, sign, modifiers, 0, 1);
+			break;
+		case 2:
+			UpdateFrequencyProperty(osc_config[o].frequency_base, sign, modifiers, -5, 5);
+			break;
+		case 3:
+			UpdatePercentageProperty(osc_config[o].amplitude_base, sign, modifiers, -10, 10);
+			break;
+		case 4:
+			UpdatePercentageProperty(osc_config[o].waveparam_lfo, sign, modifiers, -10, 10);
+			break;
+		case 5:
+			UpdateFrequencyProperty(osc_config[o].frequency_lfo, sign, modifiers, -5, 5);
+			break;
+		case 6:
+			UpdatePercentageProperty(osc_config[o].amplitude_lfo, sign, modifiers, -10, 10);
+			break;
+		}
+		break;
+	}
+
+	FillConsoleOutputAttribute(hOut, menu_title_attrib[menu_active == menu], 18, pos, &written);
+
+	for (int i = 0; i < 7; ++i)
+	{
+		COORD p = { pos.X, SHORT(pos.Y + 1 + i) };
+		FillConsoleOutputAttribute(hOut, menu_item_attrib[menu_active == menu && menu_item[menu] == i], 18, p, &written);
+	}
+
+	PrintConsole(hOut, pos, "F%d OSC%d", menu + 1, o + 1);
+
+	++pos.Y;
+	PrintConsole(hOut, pos, "%-18s", wave_name[osc_config[o].wavetype]);
+
+	++pos.Y;
+	PrintConsole(hOut, pos, "Width:     % 6.1f%%", osc_config[o].waveparam_base * 100.0f);
+
+	++pos.Y;
+	PrintConsole(hOut, pos, "Frequency: %+7.2f", osc_config[o].frequency_base * 12.0f);
+
+	++pos.Y;
+	PrintConsole(hOut, pos, "Amplitude:% 7.1f%%", osc_config[o].amplitude_base * 100.0f);
+
+	++pos.Y;
+	PrintConsole(hOut, pos, "Width LFO: %+6.1f%%", osc_config[o].waveparam_lfo * 100.0f);
+
+	++pos.Y;
+	PrintConsole(hOut, pos, "Freq LFO:  %+7.2f", osc_config[o].frequency_lfo * 12.0f);
+
+	++pos.Y;
+	PrintConsole(hOut, pos, "Ampl LFO: %+7.1f%%", osc_config[o].amplitude_lfo * 100.0f);
+}
+
+void MenuOSC1(HANDLE hOut, WORD key, DWORD modifiers)
+{
+	MenuOSC(hOut, key, modifiers, MENU_OSC1);
+}
+
+void MenuOSC2(HANDLE hOut, WORD key, DWORD modifiers)
+{
+	MenuOSC(hOut, key, modifiers, MENU_OSC2);
+}
+
 void MenuLFO(HANDLE hOut, WORD key, DWORD modifiers)
 {
-	COORD pos = { 1, 12 };
+	COORD pos = menu_pos[MENU_LFO];
 	DWORD written;
 	int sign;
 
@@ -1208,7 +1493,7 @@ void MenuLFO(HANDLE hOut, WORD key, DWORD modifiers)
 		FillConsoleOutputAttribute(hOut, menu_item_attrib[menu_active == MENU_LFO && menu_item[MENU_LFO] == i], 18, p, &written);
 	}
 
-	PrintConsole(hOut, pos, "F%d\xB3 LFO", MENU_LFO + 1);
+	PrintConsole(hOut, pos, "F%d LFO", MENU_LFO + 1);
 
 	++pos.Y;
 	PrintConsole(hOut, pos, "%-18s", wave_name[lfo_config.wavetype]);
@@ -1217,94 +1502,12 @@ void MenuLFO(HANDLE hOut, WORD key, DWORD modifiers)
 	PrintConsole(hOut, pos, "Width:     % 6.1f%%", lfo_config.waveparam * 100.0f);
 
 	++pos.Y;
-	PrintConsole(hOut, pos, "Freq: % 10.3fHz", lfo_config.frequency);
-}
-
-void MenuOSC(HANDLE hOut, WORD key, DWORD modifiers)
-{
-	COORD pos = { 21, 12 };
-	DWORD written;
-	int sign;
-
-	switch (key)
-	{
-	case VK_UP:
-		if (--menu_item[MENU_OSC] < 0)
-			menu_item[MENU_OSC] = 6;
-		break;
-
-	case VK_DOWN:
-		if (++menu_item[MENU_OSC] > 6)
-			menu_item[MENU_OSC] = 0;
-		break;
-
-	case VK_LEFT:
-	case VK_RIGHT:
-		sign = (key == VK_RIGHT) ? 1 : -1;
-		switch (menu_item[MENU_OSC])
-		{
-		case 0:
-			osc_config.wavetype = Wave((osc_config.wavetype + WAVE_COUNT + sign) % WAVE_COUNT);
-			for (int k = 0; k < KEYS; ++k)
-				osc_state[k].Reset();
-			break;
-		case 1:
-			UpdatePercentageProperty(osc_config.waveparam_base, sign, modifiers, 0, 1);
-			break;
-		case 2:
-			UpdateFrequencyProperty(osc_config.frequency_base, sign, modifiers, -10, 10);
-			break;
-		case 3:
-			UpdatePercentageProperty(osc_config.amplitude_base, sign, modifiers, -FLT_MAX, FLT_MAX);
-			break;
-		case 4:
-			UpdatePercentageProperty(osc_config.waveparam_lfo, sign, modifiers, -FLT_MAX, FLT_MAX);
-			break;
-		case 5:
-			UpdateFrequencyProperty(osc_config.frequency_lfo, sign, modifiers, -10, 10);
-			break;
-		case 6:
-			UpdatePercentageProperty(osc_config.amplitude_lfo, sign, modifiers, -FLT_MAX, FLT_MAX);
-			break;
-		}
-		break;
-	}
-
-	FillConsoleOutputAttribute(hOut, menu_title_attrib[menu_active == MENU_OSC], 18, pos, &written);
-
-	for (int i = 0; i < 7; ++i)
-	{
-		COORD p = { pos.X, SHORT(pos.Y + 1 + i) };
-		FillConsoleOutputAttribute(hOut, menu_item_attrib[menu_active == MENU_OSC && menu_item[MENU_OSC] == i], 18, p, &written);
-	}
-
-	PrintConsole(hOut, pos, "F%d\xB3 OSC", MENU_OSC + 1);
-
-	++pos.Y;
-	PrintConsole(hOut, pos, "%-18s", wave_name[osc_config.wavetype]);
-
-	++pos.Y;
-	PrintConsole(hOut, pos, "Width:     % 6.1f%%", osc_config.waveparam_base * 100.0f);
-
-	++pos.Y;
-	PrintConsole(hOut, pos, "Frequency: % 7.2f", osc_config.frequency_base * 12.0f);
-
-	++pos.Y;
-	PrintConsole(hOut, pos, "Amplitude: % 6.1f%%", osc_config.amplitude_base * 100.0f);
-
-	++pos.Y;
-	PrintConsole(hOut, pos, "Width LFO: % 6.1f%%", osc_config.waveparam_lfo * 100.0f);
-
-	++pos.Y;
-	PrintConsole(hOut, pos, "Freq LFO:  % 7.2f", osc_config.frequency_lfo * 12.0f);
-
-	++pos.Y;
-	PrintConsole(hOut, pos, "Ampl LFO:  % 6.1f%%", osc_config.amplitude_lfo * 100.0f);
+	PrintConsole(hOut, pos, "Freq: %10.3fHz", lfo_config.frequency);
 }
 
 void MenuFLT(HANDLE hOut, WORD key, DWORD modifiers)
 {
-	COORD pos = { 41, 12 };
+	COORD pos = menu_pos[MENU_FLT];
 	DWORD written;
 	int sign;
 
@@ -1332,7 +1535,7 @@ void MenuFLT(HANDLE hOut, WORD key, DWORD modifiers)
 			UpdatePercentageProperty(flt_config.resonance, sign, modifiers, 0, 4);
 			break;
 		case 2:
-			UpdateFrequencyProperty(flt_config.cutoff, sign, modifiers, -10, 10);
+			UpdateFrequencyProperty(flt_config.cutoff_base, sign, modifiers, -10, 10);
 			break;
 		case 3:
 			UpdateFrequencyProperty(flt_config.cutoff_lfo, sign, modifiers, -10, 10);
@@ -1373,7 +1576,7 @@ void MenuFLT(HANDLE hOut, WORD key, DWORD modifiers)
 		FillConsoleOutputAttribute(hOut, menu_item_attrib[menu_active == MENU_FLT && menu_item[MENU_FLT] == i], 18, p, &written);
 	}
 
-	PrintConsole(hOut, pos, "F%d\xB3 FLT", MENU_FLT + 1);
+	PrintConsole(hOut, pos, "F%d FLT", MENU_FLT + 1);
 
 	++pos.Y;
 	PrintConsole(hOut, pos, "%-18s", filter_name[flt_config.mode]);
@@ -1382,7 +1585,7 @@ void MenuFLT(HANDLE hOut, WORD key, DWORD modifiers)
 	PrintConsole(hOut, pos, "Resonance: % 7.3f", flt_config.resonance);
 
 	++pos.Y;
-	PrintConsole(hOut, pos, "Cutoff:    % 7.2f", flt_config.cutoff * 12.0f);
+	PrintConsole(hOut, pos, "Cutoff:    % 7.2f", flt_config.cutoff_base * 12.0f);
 
 	++pos.Y;
 	PrintConsole(hOut, pos, "Cutoff LFO:% 7.2f", flt_config.cutoff_lfo * 12.0f);
@@ -1405,7 +1608,7 @@ void MenuFLT(HANDLE hOut, WORD key, DWORD modifiers)
 
 void MenuVOL(HANDLE hOut, WORD key, DWORD modifiers)
 {
-	COORD pos = { 61, 12 };
+	COORD pos = menu_pos[MENU_VOL];
 	DWORD written;
 	int sign;
 
@@ -1459,7 +1662,7 @@ void MenuVOL(HANDLE hOut, WORD key, DWORD modifiers)
 		FillConsoleOutputAttribute(hOut, menu_item_attrib[menu_active == MENU_VOL && menu_item[MENU_VOL] == i], 18, p, &written);
 	}
 
-	PrintConsole(hOut, pos, "F%d\xB3 VOL", MENU_VOL + 1);
+	PrintConsole(hOut, pos, "F%d VOL", MENU_VOL + 1);
 
 	++pos.Y;
 	PrintConsole(hOut, pos, "Attack:   %5g", vol_env_config.attack_rate);
@@ -1494,7 +1697,7 @@ static void DisableEffect(int index)
 
 void MenuFX(HANDLE hOut, WORD key, DWORD modifiers)
 {
-	COORD pos = { 61, 18 };
+	COORD pos = menu_pos[MENU_FX];
 	DWORD written;
 
 	switch (key)
@@ -1518,7 +1721,7 @@ void MenuFX(HANDLE hOut, WORD key, DWORD modifiers)
 		break;
 	}
 
-	PrintConsole(hOut, pos, "F%d\xB3 FX", MENU_FX + 1);
+	PrintConsole(hOut, pos, "F%d FX", MENU_FX + 1);
 	FillConsoleOutputAttribute(hOut, menu_title_attrib[menu_active == MENU_FX], 18, pos, &written);
 
 	for (int i = 0; i < ARRAY_SIZE(fx); ++i)
@@ -1535,7 +1738,7 @@ void MenuFX(HANDLE hOut, WORD key, DWORD modifiers)
 typedef void(*MenuFunc)(HANDLE hOut, WORD key, DWORD modifiers);
 MenuFunc menufunc[MENU_COUNT] =
 {
-	MenuLFO, MenuOSC, MenuFLT, MenuVOL, MenuFX
+	MenuOSC1, MenuOSC2, MenuLFO, MenuFLT, MenuVOL, MenuFX
 };
 
 // SPECTRUM ANALYZER
@@ -1641,6 +1844,7 @@ void UpdateOscillatorWaveformDisplay(HANDLE hOut)
 #define WAVEFORM_WIDTH 80
 #define WAVEFORM_HEIGHT 20
 #define WAVEFORM_MIDLINE 10
+
 	// show the oscillator wave shape
 	// (using the lowest key frequency as reference)
 	WORD const positive = BACKGROUND_BLUE, negative = BACKGROUND_RED;
@@ -1653,28 +1857,56 @@ void UpdateOscillatorWaveformDisplay(HANDLE hOut)
 	COORD const size = { WAVEFORM_WIDTH, WAVEFORM_HEIGHT };
 	SMALL_RECT region = { 0, 50 - WAVEFORM_HEIGHT, WAVEFORM_WIDTH - 1, 49 };
 
-	// local copy of oscillator config
-	NoteOscillatorConfig config = osc_config;
-
 	// get low-frequency oscillator value
+	// (assume it is constant for the duration)
 	float const lfo = lfo_state.Update(lfo_config, 1.0f, 0.0f);
 
-	// LFO wave parameter modulation
-	config.waveparam = config.waveparam_base + config.waveparam_lfo * lfo;
+	// base phase step for plot
+	float const step_base = Clamp(wave_loop_cycle[osc_config[0].wavetype], 1, 80) / float(WAVEFORM_WIDTH);
 
-	// LFO frequency modulation
-	config.frequency = powf(2.0f, config.frequency_base + config.frequency_lfo * lfo) * wave_adjust_frequency[config.wavetype];
+	// reference key
+	int const k = keyboard_most_recent;
 
-	// LFO amplitude modulation
-	config.amplitude = config.amplitude_base + config.amplitude_lfo * lfo;
+	// key frequency
+	float const key_freq = keyboard_frequency[k] * keyboard_timescale;
 
-	// phase step for plot
-	float const step = Clamp(wave_loop_cycle[config.wavetype], 1, 80) / float(WAVEFORM_WIDTH);
+	// update filter envelope generator
+	float const flt_env_amplitude = flt_env_state[k].amplitude;
 
-	// local copy of oscillator state
-	OscillatorState state;
-	state.Reset();
-	state.phase = 0.5f * step;
+	// update volume envelope generator
+	float const vol_env_amplitude = vol_env_state[k].amplitude;
+
+	// base phase delta
+	float const delta_base = key_freq / info.freq;
+
+	// local oscillators for plot
+	static NoteOscillatorConfig config[NUM_OSCILLATORS];
+	static OscillatorState state[NUM_OSCILLATORS];
+	float step[NUM_OSCILLATORS];
+	float delta[NUM_OSCILLATORS];
+
+	for (int o = 0; o < NUM_OSCILLATORS; ++o)
+	{
+		// copy current oscillator config
+		config[o] = osc_config[o];
+
+		// step and delta phase
+		float const relative = config[o].frequency / config[0].frequency;
+		step[o] = step_base * relative;
+		delta[o] = delta_base * relative;
+
+		// half-step initial phase
+		state[o].phase = 0.5f * step[o];
+	}
+
+	// local filter for plot
+	static FilterState filter;
+	if (vol_env_state[k].state == EnvelopeState::OFF)
+		filter.Clear();
+
+	// compute cutoff parameter
+	// (assume key follow)
+	float const cutoff = powf(2, flt_config.cutoff_base + flt_config.cutoff_lfo * lfo + flt_config.cutoff_env * flt_env_amplitude) * delta_base;
 
 #ifdef SCROLL_WAVEFORM_DISPLAY
 	// scroll through the waveform
@@ -1691,14 +1923,31 @@ void UpdateOscillatorWaveformDisplay(HANDLE hOut)
 	state.index += index_offset;
 #endif
 
-	// delta time as seen by the oscillator
-	float const delta = keyboard_frequency[0] * keyboard_timescale * config.frequency * wave_adjust_frequency[config.wavetype] / info.freq;
-
 	for (int x = 0; x < WAVEFORM_WIDTH; ++x)
 	{
-		float const osc = config.amplitude * oscillator[config.wavetype](config, state, delta);
-		int grid_y = int(-(WAVEFORM_HEIGHT - 0.5f) * osc);
-		if (osc > 0.0f)
+		// sum the oscillator outputs
+		float value = 0.0f;
+		for (int o = 0; o < NUM_OSCILLATORS; ++o)
+		{
+			value += vol_env_amplitude * config[o].amplitude * oscillator[config[o].wavetype](config[o], state[o], delta[o]);
+
+			state[o].phase += step[o];
+			if (state[o].phase >= 1.0f)
+			{
+				state[o].advance = int(state[o].phase);
+				state[o].phase -= state[o].advance;
+			}
+		}
+
+		if (flt_config.mode)
+		{
+			// apply filter
+			value = filter.Update(flt_config, cutoff, value, 1.0f);
+		}
+
+		// plot waveform column
+		int grid_y = int(-(WAVEFORM_HEIGHT - 0.5f) * value);
+		if (value > 0.0f)
 		{
 			--grid_y;
 			int y = WAVEFORM_MIDLINE + (grid_y >> 1);
@@ -1731,14 +1980,28 @@ void UpdateOscillatorWaveformDisplay(HANDLE hOut)
 			for (int fill = y; fill >= WAVEFORM_MIDLINE; --fill)
 				buf[fill][x].Attributes |= negative;
 		}
-		state.phase += step;
-		if (state.phase >= 1.0f)
-		{
-			state.advance = int(state.phase);
-			state.phase -= state.advance;
-		}
 	}
 	WriteConsoleOutput(hOut, &buf[0][0], size, pos, &region);
+}
+
+void UpdateOscillatorFrequencyDisplay(HANDLE hOut)
+{
+	// reference key
+	int const k = keyboard_most_recent;
+
+	// key frequency (taking octave shift into account)
+	float const key_freq = keyboard_frequency[k] * keyboard_timescale;
+
+	// show oscillator frequencies
+	for (int o = 0; o < 2; ++o)
+	{
+		COORD const pos = { menu_pos[MENU_OSC1 + o].X + 8, menu_pos[MENU_OSC1 + o].Y };
+		float const freq = key_freq * osc_config[o].frequency;
+		if (freq >= 20000.0f)
+			PrintConsole(hOut, pos, "%7.2fkHz", freq / 1000.0f);
+		else
+			PrintConsole(hOut, pos, "%8.2fHz", freq);
+	}
 }
 
 void UpdateLowFrequencyOscillatorDisplay(HANDLE hOut)
@@ -1761,7 +2024,10 @@ void UpdateLowFrequencyOscillatorDisplay(HANDLE hOut)
 	// draw the gauge
 	COORD const pos = { 0, 0 };
 	COORD const size = { 18, 1 };
-	SMALL_RECT region = { 1, 16, 18, 16 };
+	SMALL_RECT region = { 
+		menu_pos[MENU_LFO].X, menu_pos[MENU_LFO].Y + 4,
+		menu_pos[MENU_LFO].X + 19, menu_pos[MENU_LFO].Y + 4
+	};
 	WriteConsoleOutput(hOut, &buf[0], size, pos, &region);
 }
 
@@ -1881,6 +2147,9 @@ void main(int argc, char **argv)
 	PrintKeyOctave(hOut);
 	PrintAntialias(hOut);
 
+	// make only the first oscillator audible
+	osc_config[0].amplitude_base = 1.0f;
+
 	// show all menus
 	for (int i = 0; i < MENU_COUNT - (info.dsver < 8); ++i)
 		menufunc[i](hOut, 0, 0);
@@ -1999,10 +2268,14 @@ void main(int argc, char **argv)
 								{
 									// start the oscillator
 									// (assume restart on key)
-									osc_state[k].Reset();
+									for (int o = 0; o < NUM_OSCILLATORS; ++o)
+										osc_state[k][o].Reset();
 
 									// start the filter
 									flt_state[k].Clear();
+
+									// save the note key
+									keyboard_most_recent = k;
 								}
 
 								vol_env_state[k].state = EnvelopeState::ATTACK;
@@ -2026,6 +2299,9 @@ void main(int argc, char **argv)
 
 		// update the oscillator waveform display
 		UpdateOscillatorWaveformDisplay(hOut);
+
+		// update the oscillator frequency display
+		UpdateOscillatorFrequencyDisplay(hOut);
 
 		// update the low-frequency oscillator dispaly
 		UpdateLowFrequencyOscillatorDisplay(hOut);
