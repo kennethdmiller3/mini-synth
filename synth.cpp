@@ -22,6 +22,8 @@ HSTREAM stream; // the stream
 #define ANTIALIAS_POLYBLEP 1
 #define ANTIALIAS 1
 
+bool use_antialias = true;
+
 #define SPECTRUM_WIDTH 80
 #define SPECTRUM_HEIGHT 8
 CHAR_INFO const bar_full = { 0, BACKGROUND_GREEN };
@@ -111,6 +113,76 @@ static inline float FastTanh(float x)
 		return 1;
 	return x * (27 + x * x) / (27 + 9 * x * x);
 }
+
+// Fast float-to-integer conversions based on an article by Laurent de Soras
+// http://ldesoras.free.fr/doc/articles/rounding_en.pdf
+// The input value must be in the interval [-2**30, 2**30-1]
+
+// fast integer round
+static inline int RoundInt(float const x)
+{
+	float const round_nearest = 0.5f;
+	int i;
+	__asm
+	{
+		fld x;
+		fadd st, st(0);
+		fadd round_nearest;
+		fistp i;
+		sar i, 1;
+	}
+	return i;
+}
+
+// fast integer floor
+static inline int FloorInt(float const x)
+{
+	float const round_minus_infinity = -0.5f;
+	int i;
+	__asm
+	{
+		fld x;
+		fadd st, st(0);
+		fadd round_minus_infinity;
+		fistp i;
+		sar i, 1;
+	}
+	return i;
+}
+
+// fast integer ceiling
+static inline int CeilingInt(float const x)
+{
+	float const round_plus_infinity = -0.5f;
+	int i;
+	__asm
+	{
+		fld x;
+		fadd st, st(0);
+		fsubr round_plus_infinity;
+		fistp i;
+		sar i, 1;
+	}
+	return -i;
+}
+
+// fast integer truncate
+static inline int TruncateInt(float const x)
+{
+	float const round_minus_infinity = -0.5f;
+	int i;
+	__asm
+	{
+		fld x;
+		fadd st, st(0);
+		fabs;
+		fadd round_minus_infinity;
+		fistp i;
+		sar i, 1;
+	}
+	return x >= 0 ? i : -i;
+}
+
 
 #if ANTIALIAS == ANTIALIAS_POLYBLEP
 // width of bandlimited step relative to the sample period
@@ -265,11 +337,17 @@ public:
 	float frequency;
 	float amplitude;
 
+	// hard sync
+	bool sync_enable;
+	float sync_phase;
+
 	OscillatorConfig(Wave const wavetype, float const waveparam, float const frequency, float const amplitude)
 		: wavetype(wavetype)
 		, waveparam(waveparam)
 		, frequency(frequency)
 		, amplitude(amplitude)
+		, sync_enable(false)
+		, sync_phase(1.0f)
 	{
 	}
 };
@@ -337,7 +415,6 @@ public:
 	}
 };
 NoteOscillatorConfig osc_config[NUM_OSCILLATORS];
-// TO DO: hard sync
 // TO DO: keyboard follow dial?
 // TO DO: oscillator mixer
 
@@ -715,30 +792,83 @@ int const wave_loop_cycle[WAVE_COUNT] =
 };
 
 // sine oscillator
+static inline float GetSineValue(float const phase)
+{
+	return sinf(M_PI * 2.0f * phase);
+}
+static inline float GetSineSlope(float const phase)
+{
+	return cosf(M_PI * 2.0f * phase);
+}
 float OscillatorSine(OscillatorConfig const &config, OscillatorState &state, float step)
 {
 	if (step > 0.5f)
 		return 0.0f;
-	float const value = sinf(M_PI * 2.0f * state.phase);
+	float value = GetSineValue(state.phase);
+#if ANTIALIAS == ANTIALIAS_POLYBLEP
+	if (use_antialias && config.sync_enable)
+	{
+		float const w = Min(step * POLYBLEP_WIDTH, 1.0f);
+
+		// handle discontinuity at zero phase
+		if (state.phase < w)
+		{
+			value -= (GetSineValue(config.sync_phase)) * 0.5f * PolyBLEP(state.phase, w);
+			value -= (GetSineSlope(config.sync_phase) - 1.0f) * 0.5f * IntegratedPolyBLEP(state.phase, w);
+		}
+
+		// handle discontinuity at sync phase
+		if (state.phase - config.sync_phase > -w)
+		{
+			value -= (GetSineValue(config.sync_phase)) * 0.5f * PolyBLEP(state.phase - config.sync_phase, w);
+			value -= (GetSineSlope(config.sync_phase) - 1.0f) * 0.5f * IntegratedPolyBLEP(state.phase - config.sync_phase, w);
+		}
+	}
+#endif
 	return value;
 }
-
-bool use_antialias = true;
 
 // sawtooth oscillator
 // - 2/pi sum k=1..infinity sin(k*2*pi*phase)/n
 // - smoothed transition to reduce aliasing
+static inline float GetSawtoothValue(float const phase)
+{
+	return 1.0f - 2.0f * (phase - FloorInt(phase));
+}
 float OscillatorSawtooth(OscillatorConfig const &config, OscillatorState &state, float step)
 {
 	if (step > 0.5f)
 		return 0.0f;
-	float value = 1.0f - 2.0f * state.phase;
+	float value = GetSawtoothValue(state.phase);
 #if ANTIALIAS == ANTIALIAS_POLYBLEP
 	if (use_antialias)
 	{
 		float const w = Min(step * POLYBLEP_WIDTH, 1.0f);
-		value += PolyBLEP(state.phase, w);
-		value += PolyBLEP(state.phase - 1, w);
+		if (config.sync_enable)
+		{
+			// handle last integer phase before sync from the previous wave cycle
+			float up_before_zero = float(FloorInt(config.sync_phase)) - config.sync_phase;
+			value += PolyBLEP(state.phase - up_before_zero, w);
+
+			// handle dscontinuity at integer phases
+			float const up_nearest = float(RoundInt(state.phase));
+			if (up_nearest > 0 && up_nearest <= config.sync_phase)
+				value += PolyBLEP(state.phase - up_nearest, w);
+
+			// handle discontituity at sync phase
+			float const sync_value = GetSawtoothValue(config.sync_phase);
+			if (sync_value < 0.999969482421875f)
+			{
+				float const delta_value = 0.5f * (1.0f - sync_value);
+				value += delta_value * PolyBLEP(state.phase, w);
+				value += delta_value * PolyBLEP(state.phase - config.sync_phase, w);
+			}
+		}
+		else
+		{
+			value += PolyBLEP(state.phase, w);
+			value += PolyBLEP(state.phase - 1, w);
+		}
 	}
 #endif
 	return value;
@@ -749,6 +879,10 @@ float OscillatorSawtooth(OscillatorConfig const &config, OscillatorState &state,
 // - pulse width 0.5 is square wave
 // - 4/pi sum k=0..infinity sin((2*k+1)*2*pi*phase)/(2*k+1)
 // - smoothed transition to reduce aliasing
+static inline float GetPulseValue(float const phase, float const width)
+{
+	return phase - FloorInt(phase) < width ? 1.0f : -1.0f;
+}
 float OscillatorPulse(OscillatorConfig const &config, OscillatorState &state, float step)
 {
 	if (step > 0.5f)
@@ -757,16 +891,61 @@ float OscillatorPulse(OscillatorConfig const &config, OscillatorState &state, fl
 		return -1.0f;
 	if (config.waveparam >= 1.0f)
 		return 1.0f;
-	float value = state.phase < config.waveparam ? 1.0f : -1.0f;
+	float value = GetPulseValue(state.phase, config.waveparam);
 #if ANTIALIAS == ANTIALIAS_POLYBLEP
 	if (use_antialias)
 	{
 		float const w = Min(step * POLYBLEP_WIDTH, 1.0f);
-		value -= PolyBLEP(state.phase + 1 - config.waveparam, w);
-		value += PolyBLEP(state.phase, w);
-		value -= PolyBLEP(state.phase - config.waveparam, w);
-		value += PolyBLEP(state.phase - 1, w);
-		value -= PolyBLEP(state.phase - 1 - config.waveparam, w);
+
+		// nearest up edge
+		float const up_nearest = float(RoundInt(state.phase));
+
+		// nearest down edge
+		float const down_nearest = float(RoundInt(state.phase - config.waveparam) + 1) - config.waveparam;
+
+		if (config.sync_enable)
+		{
+			// short-circuit case
+			if (config.sync_phase < config.waveparam)
+				return 1.0f;
+
+			// last up transition before sync
+			float const up_before_sync = float(CeilingInt(config.sync_phase) - 1);
+
+			// handle discontinuity at zero phase
+			if (config.sync_phase > up_before_sync + config.waveparam)
+			{
+				// down edge before sync wrapped before zero
+				value -= PolyBLEP(state.phase - (up_before_sync + config.waveparam - config.sync_phase), w);
+				// up edge at 0
+				value += PolyBLEP(state.phase, w);
+			}
+			else
+			{
+				// up edge before sync wrapped before zero
+				value += PolyBLEP(state.phase - (up_before_sync - config.sync_phase), w);
+			}
+
+			// handle nearest up transition if it's in range
+			if (up_nearest > 0 && up_nearest <= up_before_sync)
+				value += PolyBLEP(state.phase - up_nearest, w);
+
+			// handle nearest down transition if it's in range
+			if (down_nearest > 0 && down_nearest < config.sync_phase)
+				value -= PolyBLEP(state.phase - down_nearest, w);
+
+			// handle discontinuity at sync phase
+			if (config.sync_phase > up_before_sync + config.waveparam)
+			{
+				// up edge at config.sync_phase
+				value += PolyBLEP(state.phase - config.sync_phase, w);
+			}
+		}
+		else
+		{
+			value += PolyBLEP(state.phase - up_nearest, w);
+			value -= PolyBLEP(state.phase - down_nearest, w);
+		}
 	}
 #endif
 	return value;
@@ -774,19 +953,68 @@ float OscillatorPulse(OscillatorConfig const &config, OscillatorState &state, fl
 
 // triangle oscillator
 // - 8/pi**2 sum k=0..infinity (-1)**k sin((2*k+1)*2*pi*phase)/(2*k+1)**2
+static inline float GetTriangleValue(float const phase)
+{
+	return fabsf(4 * (phase - FloorInt(phase - 0.25f)) - 3) - 1;
+}
 float OscillatorTriangle(OscillatorConfig const &config, OscillatorState &state, float step)
 {
 	if (step > 0.5f)
 		return 0.0f;
-	float value = fabsf(2 - fabsf(4 * state.phase - 1)) - 1;
+	float value = GetTriangleValue(state.phase);
 #if ANTIALIAS == ANTIALIAS_POLYBLEP
 	if (use_antialias)
 	{
 		float const w = Min(step * INTEGRATED_POLYBLEP_WIDTH, 0.5f);
-		value -= IntegratedPolyBLEP(state.phase + 0.75f, w);
-		value += IntegratedPolyBLEP(state.phase + 0.25f, w);
-		value -= IntegratedPolyBLEP(state.phase - 0.25f, w);
-		value += IntegratedPolyBLEP(state.phase - 0.75f, w);
+
+		// nearest /\ slope transtiion
+		float const down_nearest = float(FloorInt(state.phase + 0.25f)) + 0.25f;
+
+		// nearest \/ slope transition
+		float const up_nearest = float(FloorInt(state.phase - 0.25f)) + 0.75f;
+
+		if (config.sync_enable)
+		{
+			// handle discontinuity at 0
+			if (state.phase < w)
+			{
+				// sync during downward slope creates a \/ transition
+				float const sync_fraction = config.sync_phase - float(FloorInt(config.sync_phase));
+				if (sync_fraction > 0.25f && sync_fraction < 0.75)
+					value += IntegratedPolyBLEP(state.phase, w);
+
+				// wave value discontinuity creates a | transition 
+				float sync_value = GetTriangleValue(config.sync_phase);
+				float const delta_value = -0.5f * sync_value;
+				value += delta_value * PolyBLEP(state.phase, w);
+			}
+			
+			// handle /\ and \/ slope discontinuities
+			if (down_nearest > 0 && down_nearest < config.sync_phase)
+				value -= IntegratedPolyBLEP(state.phase - down_nearest, w);
+			if (up_nearest > 0 && up_nearest < config.sync_phase)
+				value += IntegratedPolyBLEP(state.phase - up_nearest, w);
+
+			// handle discontinuity at sync phase
+			if (state.phase - config.sync_phase < w)
+			{
+				// sync during downward slope creates a \/ transition
+				float const sync_fraction = config.sync_phase - float(FloorInt(config.sync_phase));
+				if (sync_fraction > 0.25f && sync_fraction < 0.75)
+					value += IntegratedPolyBLEP(state.phase - config.sync_phase, w);
+
+				// wave value discontinuity creates a | transition 
+				float sync_value = GetTriangleValue(config.sync_phase);
+				float const delta_value = -0.5f * sync_value;
+				value += delta_value * PolyBLEP(state.phase - config.sync_phase, w);
+			}
+		}
+		else
+		{
+			// handle /\ and \/ slope discontinuities
+			value -= IntegratedPolyBLEP(state.phase - down_nearest, w);
+			value += IntegratedPolyBLEP(state.phase - up_nearest, w);
+		}
 	}
 #endif
 	return value;
@@ -813,8 +1041,8 @@ float OscillatorPoly(OscillatorConfig const &config, OscillatorState &state, cha
 	{
 		float w = Min(step * POLYBLEP_WIDTH, 8.0f);
 
-		int const back = int(state.phase - w + cycle) - cycle;
-		int const ahead = int(state.phase + w);
+		int const back = FloorInt(state.phase - w);
+		int const ahead = FloorInt(state.phase + w);
 		int const count = ahead - back;
 		if (count > 0)
 		{
@@ -952,15 +1180,15 @@ float OscillatorState::Update(OscillatorConfig const &config, float const freque
 
 	// accumulate oscillator phase
 	phase += delta;
-	if (phase >= 1.0f)
+	if (phase >= config.sync_phase)
 	{
-		advance = int(phase);
-		phase -= advance;
+		advance = FloorInt(phase / config.sync_phase);
+		phase -= advance * config.sync_phase;
 	}
 	else if (phase < 0.0f)
 	{
-		advance = int(phase) + 1;
-		phase -= advance;
+		advance = FloorInt(phase / config.sync_phase);
+		phase -= advance * config.sync_phase;
 	}
 
 	return value;
@@ -1242,9 +1470,13 @@ DWORD CALLBACK WriteStream(HSTREAM handle, short *buffer, DWORD length, void *us
 
 			// update oscillator
 			// (assume key follow)
-			float osc_value = 0.0f;
-			for (int o = 0; o < NUM_OSCILLATORS; ++o)
+			float osc_value = osc_state[k][0].Update(osc_config[0], key_freq, step);
+			for (int o = 1; o < NUM_OSCILLATORS; ++o)
+			{
+				if (osc_config[o].sync_enable)
+					osc_config[o].sync_phase = osc_config[o].frequency / osc_config[0].frequency;
 				osc_value += osc_state[k][o].Update(osc_config[o], key_freq, step);
+			}
 
 			// update filter
 			float flt_value;
@@ -1350,11 +1582,11 @@ void MenuOSC(HANDLE hOut, WORD key, DWORD modifiers, MenuMode menu)
 	{
 	case VK_UP:
 		if (--menu_item[menu] < 0)
-			menu_item[menu] = 6;
+			menu_item[menu] = 6 + (o > 0);
 		break;
 
 	case VK_DOWN:
-		if (++menu_item[menu] > 6)
+		if (++menu_item[menu] > 6 + (o > 0))
 			menu_item[menu] = 0;
 		break;
 
@@ -1386,13 +1618,24 @@ void MenuOSC(HANDLE hOut, WORD key, DWORD modifiers, MenuMode menu)
 		case 6:
 			UpdatePercentageProperty(osc_config[o].amplitude_lfo, sign, modifiers, -10, 10);
 			break;
+		case 7:
+			if (key == VK_RIGHT)
+			{
+				osc_config[o].sync_enable = true;
+			}
+			else
+			{
+				osc_config[o].sync_enable = false;
+				osc_config[o].sync_phase = 1.0f;
+			}
+			break;
 		}
 		break;
 	}
 
 	FillConsoleOutputAttribute(hOut, menu_title_attrib[menu_active == menu], 18, pos, &written);
 
-	for (int i = 0; i < 7; ++i)
+	for (int i = 0; i < 7 + (o > 0); ++i)
 	{
 		COORD p = { pos.X, SHORT(pos.Y + 1 + i) };
 		FillConsoleOutputAttribute(hOut, menu_item_attrib[menu_active == menu && menu_item[menu] == i], 18, p, &written);
@@ -1420,6 +1663,15 @@ void MenuOSC(HANDLE hOut, WORD key, DWORD modifiers, MenuMode menu)
 
 	++pos.Y;
 	PrintConsole(hOut, pos, "Ampl LFO: %+7.1f%%", osc_config[o].amplitude_lfo * 100.0f);
+
+	if (o > 0)
+	{
+		++pos.Y;
+		PrintConsole(hOut, pos, "Hard Sync:     %3s", osc_config[o].sync_enable ? "ON" : "OFF");
+		WORD const attrib = menu_item_attrib[menu_active == menu && menu_item[menu] == 7];
+		COORD const pos2 = { pos.X + 15, pos.Y };
+		FillConsoleOutputAttribute(hOut, (attrib & 0xF8) | (osc_config[o].sync_enable ? FOREGROUND_GREEN : FOREGROUND_RED), 3, pos2, &written);
+	}
 }
 
 void MenuOSC1(HANDLE hOut, WORD key, DWORD modifiers)
@@ -1716,7 +1968,7 @@ void MenuFX(HANDLE hOut, WORD key, DWORD modifiers)
 		WORD const attrib = menu_item_attrib[menu_active == MENU_FX && menu_item[MENU_FX] == i];
 		FillConsoleOutputAttribute(hOut, attrib, 15, pos, &written);
 		COORD const pos2 = { pos.X + 15, pos.Y };
-		FillConsoleOutputAttribute(hOut, (attrib & 0xF0) | (fx[i] ? FOREGROUND_GREEN : FOREGROUND_RED), 3, pos2, &written);
+		FillConsoleOutputAttribute(hOut, (attrib & 0xF8) | (fx[i] ? FOREGROUND_GREEN : FOREGROUND_RED), 3, pos2, &written);
 	}
 }
 
@@ -1744,7 +1996,7 @@ void UpdateSpectrumAnalyzer(HANDLE hOut)
 	// (half a semitone down from the center frequency)
 	float const semitone = powf(2.0f, 1.0f / 12.0f);
 	float freq = freq_min * FREQUENCY_BINS * 2.0f / info.freq / sqrtf(semitone);
-	int b0 = Max(int(freq), 0);
+	int b0 = Max(RoundInt(freq), 0);
 
 	// get power in each semitone band
 	static float spectrum[SPECTRUM_WIDTH] = { 0 };
@@ -1753,7 +2005,7 @@ void UpdateSpectrumAnalyzer(HANDLE hOut)
 	{
 		// get upper frequency bin for the current semitone
 		freq *= semitone;
-		int const b1 = Min(int(freq), FREQUENCY_BINS);
+		int const b1 = Min(RoundInt(freq), FREQUENCY_BINS);
 
 		// ensure there's at least one bin
 		// (or quit upon reaching the last bin)
@@ -1776,7 +2028,7 @@ void UpdateSpectrumAnalyzer(HANDLE hOut)
 	}
 
 	// inaudible band
-	int xinaudible = int(logf(20000 / freq_min) * 12 / logf(2)) - 1;
+	int xinaudible = RoundInt(logf(20000 / freq_min) * 12 / logf(2));
 
 	// plot log-log spectrum
 	// each grid cell is one semitone wide and 6 dB high
@@ -1906,14 +2158,14 @@ void UpdateOscillatorWaveformDisplay(HANDLE hOut)
 	{
 		// get steps needed to advance OSC1 by the time step
 		// (subtracting the steps that the plot itself will take)
-		int steps = int(key_freq * osc_config[0].frequency * deltaTime / 1000 - 1) * WAVEFORM_WIDTH;
+		int steps = FloorInt(key_freq * osc_config[0].frequency * deltaTime / 1000 - 1) * WAVEFORM_WIDTH;
 		if (steps > 0)
 		{
 			// "rewind" oscillators so they'll end at zero phase
 			for (int o = 0; o < NUM_OSCILLATORS; ++o)
 			{
-				state[o].phase -= step[o] * steps;
-				int const advance = int(state[o].phase) + (state[o].phase < 0);	// int() rounds negative values towards zero
+				state[o].phase -= step[osc_config[o].sync_enable ? 0 : o] * steps;
+				int const advance = FloorInt(state[o].phase);
 				state[o].phase -= advance;
 				int const cycle = wave_loop_cycle[config[o].wavetype];
 				state[o].index = (state[o].index + advance) % cycle;
@@ -1928,14 +2180,13 @@ void UpdateOscillatorWaveformDisplay(HANDLE hOut)
 				float value = 0.0f;
 				for (int o = 0; o < NUM_OSCILLATORS; ++o)
 				{
+					if (config[o].sync_enable)
+						config[o].sync_phase = config[o].frequency / config[0].frequency;
 					value += vol_env_amplitude * config[o].amplitude * oscillator[config[o].wavetype](config[o], state[o], delta[o]);
 
 					state[o].phase += step[o];
-					if (state[o].phase >= 1.0f)
-					{
-						state[o].advance = int(state[o].phase);
-						state[o].phase -= state[o].advance;
-					}
+					state[o].advance = FloorInt(state[o].phase);
+					state[o].phase -= state[o].advance;
 				}
 
 				// apply filter
@@ -1962,17 +2213,18 @@ void UpdateOscillatorWaveformDisplay(HANDLE hOut)
 	for (int x = 0; x < WAVEFORM_WIDTH; ++x)
 	{
 		// sum the oscillator outputs
-		float value = 0.0f;
-		for (int o = 0; o < NUM_OSCILLATORS; ++o)
+		float value = vol_env_amplitude * config[0].amplitude * oscillator[config[0].wavetype](config[0], state[0], delta[0]);
+		state[0].phase += step[0];
+		state[0].advance = FloorInt(state[0].phase);
+		state[0].phase -= state[0].advance;
+		for (int o = 1; o < NUM_OSCILLATORS; ++o)
 		{
+			if (config[o].sync_enable)
+				config[o].sync_phase = config[o].frequency / config[0].frequency;
 			value += vol_env_amplitude * config[o].amplitude * oscillator[config[o].wavetype](config[o], state[o], delta[o]);
-
 			state[o].phase += step[o];
-			if (state[o].phase >= 1.0f)
-			{
-				state[o].advance = int(state[o].phase);
-				state[o].phase -= state[o].advance;
-			}
+			state[o].advance = int(state[o].phase / config[o].sync_phase);
+			state[o].phase -= state[o].advance * config[o].sync_phase;
 		}
 
 		if (flt_config.mode)
@@ -1982,11 +2234,10 @@ void UpdateOscillatorWaveformDisplay(HANDLE hOut)
 		}
 
 		// plot waveform column
-		int grid_y = int(-(WAVEFORM_HEIGHT - 0.5f) * value);
+		int grid_y = FloorInt(-(WAVEFORM_HEIGHT - 0.5f) * value);
+		int y = WAVEFORM_MIDLINE + (grid_y >> 1);
 		if (value > 0.0f)
 		{
-			--grid_y;
-			int y = WAVEFORM_MIDLINE + (grid_y >> 1);
 			if (y >= 0)
 			{
 				buf[y][x] = plot[grid_y & 1];
@@ -2002,7 +2253,6 @@ void UpdateOscillatorWaveformDisplay(HANDLE hOut)
 		}
 		else
 		{
-			int y = WAVEFORM_MIDLINE + (grid_y >> 1);
 			if (y < WAVEFORM_HEIGHT)
 			{
 				buf[y][x] = plot[grid_y & 1];
@@ -2054,7 +2304,7 @@ void UpdateLowFrequencyOscillatorDisplay(HANDLE hOut)
 	// plot low-frequency oscillator value
 	CHAR const plot[2] = { 221, 222 };
 	float const lfo = lfo_state.Update(lfo_config, 1.0f, 0.0f);
-	int grid_x = Clamp(int(18.0f * lfo + 18.0f), 0, 35);
+	int grid_x = Clamp(FloorInt(18.0f * lfo + 18.0f), 0, 35);
 	buf[grid_x / 2].Char.AsciiChar = plot[grid_x & 1];
 
 	// draw the gauge
@@ -2091,6 +2341,7 @@ void main(int argc, char **argv)
 	{
 		// turn on floating-point exceptions
 		unsigned int prev;
+		_clearfp();
 		_controlfp_s(&prev, 0, _EM_ZERODIVIDE|_EM_INVALID);
 	}
 #endif
