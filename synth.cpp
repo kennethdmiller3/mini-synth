@@ -35,7 +35,7 @@ CHAR_INFO const bar_nyquist = { 0, BACKGROUND_RED };
 #define NUM_OSCILLATORS 2
 
 // debug output
-int DebugPrint(const char *format, ...)
+int DebugPrint(char const *format, ...)
 {
 	va_list ap;
 	va_start(ap, format);
@@ -57,7 +57,7 @@ void GetLastErrorMessage(CHAR buf[], DWORD size)
 }
 
 // formatted write console output
-int PrintConsole(HANDLE out, COORD pos, const char *format, ...)
+int PrintConsole(HANDLE out, COORD pos, char const *format, ...)
 {
 	va_list ap;
 	va_start(ap, format);
@@ -65,6 +65,19 @@ int PrintConsole(HANDLE out, COORD pos, const char *format, ...)
 	vsnprintf_s(buf, sizeof(buf), format, ap);
 	DWORD written;
 	WriteConsoleOutputCharacter(out, buf, strlen(buf), pos, &written);
+	return written;
+}
+
+// formatted write console output with an attribute
+int PrintConsoleWithAttribute(HANDLE out, COORD pos, WORD attrib, char const *format, ...)
+{
+	va_list ap;
+	va_start(ap, format);
+	char buf[256];
+	vsnprintf_s(buf, sizeof(buf), format, ap);
+	DWORD written;
+	WriteConsoleOutputCharacter(out, buf, strlen(buf), pos, &written);
+	FillConsoleOutputAttribute(out, attrib, written, pos, &written);
 	return written;
 }
 
@@ -234,12 +247,22 @@ COORD const key_pos = { 12, SPECTRUM_HEIGHT };
 static size_t const KEYS = ARRAY_SIZE(keys);
 
 // menu attributes
-WORD const menu_title_attrib[] =
+WORD const menu_title_attrib[2][3] =
 {
-	FOREGROUND_RED | FOREGROUND_GREEN | FOREGROUND_BLUE | BACKGROUND_BLUE,
-	FOREGROUND_RED | FOREGROUND_GREEN | FOREGROUND_BLUE | FOREGROUND_INTENSITY | BACKGROUND_GREEN | BACKGROUND_BLUE,
+	{
+		// component turned off
+		FOREGROUND_RED | FOREGROUND_GREEN | FOREGROUND_BLUE | BACKGROUND_RED,
+		FOREGROUND_RED | FOREGROUND_GREEN | FOREGROUND_BLUE | FOREGROUND_INTENSITY | BACKGROUND_RED,
+		FOREGROUND_RED | FOREGROUND_GREEN | FOREGROUND_INTENSITY | BACKGROUND_RED | BACKGROUND_GREEN,
+	},
+	{
+		// component turned on
+		FOREGROUND_RED | FOREGROUND_GREEN | FOREGROUND_BLUE | BACKGROUND_BLUE,
+		FOREGROUND_RED | FOREGROUND_GREEN | FOREGROUND_BLUE | FOREGROUND_INTENSITY | BACKGROUND_BLUE,
+		FOREGROUND_RED | FOREGROUND_GREEN | FOREGROUND_INTENSITY | BACKGROUND_GREEN | BACKGROUND_BLUE,
+	}
 };
-WORD const menu_item_attrib[] =
+WORD const menu_item_attrib[2] =
 {
 	FOREGROUND_RED | FOREGROUND_GREEN | FOREGROUND_BLUE,
 	FOREGROUND_RED | FOREGROUND_GREEN | FOREGROUND_INTENSITY | BACKGROUND_BLUE,
@@ -264,6 +287,17 @@ MenuMode menu_active = MENU_OSC1;
 // selected item in each menu
 int menu_item[MENU_COUNT];
 
+// menu names
+char const * const menu_name[MENU_COUNT] =
+{
+	"OSC1",
+	"OSC2",
+	"LFO",
+	"FLT",
+	"VOL",
+	"FX",
+};
+
 // position of each menu
 COORD const menu_pos[MENU_COUNT] =
 {
@@ -279,6 +313,10 @@ char const * const fx_name[9] =
 {
 	"Chorus", "Compressor", "Distortion", "Echo", "Flanger", "Gargle", "I3DL2Reverb", "ParamEQ", "Reverb"
 };
+
+// effect config
+bool fx_enable;
+bool fx_active[9];
 
 // effect handles
 HFX fx[9];
@@ -332,6 +370,8 @@ typedef float(*OscillatorFunc)(OscillatorConfig const &config, OscillatorState &
 class OscillatorConfig
 {
 public:
+	bool enable;
+
 	Wave wavetype;
 	float waveparam;
 	float frequency;
@@ -341,8 +381,9 @@ public:
 	bool sync_enable;
 	float sync_phase;
 
-	OscillatorConfig(Wave const wavetype, float const waveparam, float const frequency, float const amplitude)
-		: wavetype(wavetype)
+	OscillatorConfig(bool const enable, Wave const wavetype, float const waveparam, float const frequency, float const amplitude)
+		: enable(enable)
+		, wavetype(wavetype)
 		, waveparam(waveparam)
 		, frequency(frequency)
 		, amplitude(amplitude)
@@ -374,8 +415,8 @@ class LFOOscillatorConfig : public OscillatorConfig
 public:
 	float frequency_base;	// logarithmic offset from 1 Hz
 
-	explicit LFOOscillatorConfig(Wave const wavetype = WAVE_SINE, float const waveparam = 0.5f, float const frequency = 1.0f, float const amplitude = 1.0f)
-		: OscillatorConfig(wavetype, waveparam, frequency, amplitude)
+	explicit LFOOscillatorConfig(bool const enable = false, Wave const wavetype = WAVE_SINE, float const waveparam = 0.5f, float const frequency = 1.0f, float const amplitude = 1.0f)
+		: OscillatorConfig(enable, wavetype, waveparam, frequency, amplitude)
 		, frequency_base(0.0f)
 	{
 	}
@@ -403,8 +444,8 @@ public:
 	float frequency_lfo;
 	float amplitude_lfo;
 
-	explicit NoteOscillatorConfig(Wave const wavetype = WAVE_SAWTOOTH, float const waveparam = 0.5f, float const frequency = 1.0f, float const amplitude = 0.0f)
-		: OscillatorConfig(wavetype, waveparam, frequency, amplitude)
+	explicit NoteOscillatorConfig(bool const enable = false, Wave const wavetype = WAVE_SAWTOOTH, float const waveparam = 0.5f, float const frequency = 1.0f, float const amplitude = 1.0f)
+		: OscillatorConfig(enable, wavetype, waveparam, frequency, amplitude)
 		, waveparam_base(waveparam)
 		, frequency_base(0.0f)
 		, amplitude_base(amplitude)
@@ -421,25 +462,40 @@ NoteOscillatorConfig osc_config[NUM_OSCILLATORS];
 // note oscillator state
 OscillatorState osc_state[KEYS][NUM_OSCILLATORS];
 
+// envelope bias values to make the exponential decay arrive in finite time
+// the attack part is set up to be more linear (and shorter) than the decay/release part
+static const float ENV_ATTACK_CONSTANT = 1.0f;
+static const float ENV_DECAY_CONSTANT = 3.0f;
+static float const ENV_ATTACK_BIAS = 1.0f / (1.0f - expf(-ENV_ATTACK_CONSTANT)) - 1.0f;
+static float const ENV_DECAY_BIAS = 1.0f - 1.0f / (1.0f - expf(-ENV_DECAY_CONSTANT));
+
 // envelope generator configuration
 class EnvelopeConfig
 {
 public:
+	bool enable;
+	float attack_time;
 	float attack_rate;
+	float decay_time;
 	float decay_rate;
 	float sustain_level;
+	float release_time;
 	float release_rate;
 
-	EnvelopeConfig(float const attack_rate, float const decay_rate, float const sustain_level, float const release_rate)
-		: attack_rate(attack_rate)
-		, decay_rate(decay_rate)
+	EnvelopeConfig(bool const enable, float const attack_time, float const decay_time, float const sustain_level, float const release_time)
+		: enable(enable)
+		, attack_time(attack_time)
+		, attack_rate(1 / Max(attack_time, 0.0001f))
+		, decay_time(decay_time)
+		, decay_rate(1 / Max(decay_time, 0.0001f))
 		, sustain_level(sustain_level)
-		, release_rate(release_rate)
+		, release_time(release_time)
+		, release_rate(1 / Max(release_time, 0.0001f))
 	{
 	}
 };
-EnvelopeConfig flt_env_config(256.0f, 16.0f, 0.0f, 256.0f);
-EnvelopeConfig vol_env_config(256.0f, 16.0f, 1.0f, 256.0f);
+EnvelopeConfig flt_env_config(false, 0.0f, 1.0f, 0.0f, 0.1f);
+EnvelopeConfig vol_env_config(false, 0.0f, 1.0f, 1.0f, 0.1f);
 
 // envelope generator state
 class EnvelopeState
@@ -472,8 +528,6 @@ public:
 
 EnvelopeState flt_env_state[KEYS];
 EnvelopeState vol_env_state[KEYS];
-static float const ENV_ATTACK_BIAS = 1.0f/(1.0f-expf(-1.0f))-1.0f;	// 1x time constant
-static float const ENV_DECAY_BIAS = 1.0f-1.0f/(1.0f-expf(-3.0f));	// 3x time constant
 // TO DO: multiple envelopes?  filter, amplifier, global
 
 WORD const env_attrib[EnvelopeState::COUNT] =
@@ -490,9 +544,9 @@ WORD const env_attrib[EnvelopeState::COUNT] =
 class FilterConfig
 {
 public:
+	bool enable;
 	enum Mode
 	{
-		NONE,
 		PEAK,
 		LOWPASS_1,
 		LOWPASS_2,
@@ -526,8 +580,9 @@ public:
 	// resonance parameter
 	float resonance;
 
-	FilterConfig(Mode const mode, float const cutoff_base, float const cutoff_lfo, float const cutoff_env, float const resonance)
-		: mode(mode)
+	FilterConfig(bool const enable, Mode const mode, float const cutoff_base, float const cutoff_lfo, float const cutoff_env, float const resonance)
+		: enable(enable)
+		, mode(mode)
 		, cutoff_base(cutoff_base)
 		, cutoff_lfo(cutoff_lfo)
 		, cutoff_env(cutoff_env)
@@ -535,11 +590,10 @@ public:
 	{
 	}
 };
-FilterConfig flt_config(FilterConfig::NONE, 0.0f, 0.0f, 0.0f, 0.0f);
+FilterConfig flt_config(false, FilterConfig::LOWPASS_4, 0.0f, 0.0f, 0.0f, 0.0f);
 
-const char * const filter_name[FilterConfig::COUNT] =
+char const * const filter_name[FilterConfig::COUNT] =
 {
-	"None",
 	"Peak",
 	"Low-Pass 1",
 	"Low-Pass 2",
@@ -596,7 +650,6 @@ const char * const filter_name[FilterConfig::COUNT] =
 float const filter_mix[FilterConfig::COUNT][5] =
 {
 	//y0  y1  y2  y3  y4 
-	{  0,  0,  0,  0,  0 }, // NONE,
 	{  1,  0,  0,  0,  0 },	// PEAK,					// input with feedback term
 	{  0,  1,  0,  0,  0 }, // LOWPASS_1,
 	{  0,  0,  1,  0,  0 }, // LOWPASS_2,
@@ -1173,6 +1226,9 @@ void OscillatorState::Reset()
 // update oscillator
 float OscillatorState::Update(OscillatorConfig const &config, float const frequency, float const step)
 {
+	if (!config.enable)
+		return 0.0f;
+
 	float const delta = config.frequency * frequency * step;
 
 	// get oscillator value
@@ -1197,6 +1253,8 @@ float OscillatorState::Update(OscillatorConfig const &config, float const freque
 // update envelope generator
 float EnvelopeState::Update(EnvelopeConfig const &config, float const step)
 {
+	if (!config.enable)
+		return gate;
 	float env_target;
 	switch (state)
 	{
@@ -1480,7 +1538,7 @@ DWORD CALLBACK WriteStream(HSTREAM handle, short *buffer, DWORD length, void *us
 
 			// update filter
 			float flt_value;
-			if (flt_config.mode)
+			if (flt_config.enable)
 			{
 				// compute cutoff frequency
 				// (assume key follow)
@@ -1571,6 +1629,74 @@ void UpdatePercentageProperty(float &property, int const sign, DWORD const modif
 	property = Clamp(value / 256.0f, minimum, maximum);
 }
 
+// update a linear percentage property
+void UpdateTimeProperty(float &property, int const sign, DWORD const modifiers, float const minimum, float const maximum)
+{
+	float value = roundf(property * 1000.0f);
+	if (modifiers & (LEFT_ALT_PRESSED | RIGHT_ALT_PRESSED))
+		value += sign * 1;		// tiny step: 1ms
+	else if (modifiers & (LEFT_CTRL_PRESSED | RIGHT_CTRL_PRESSED))
+		value += sign * 10;		// small step: 10ms
+	else if (!(modifiers & (SHIFT_PRESSED)))
+		value += sign * 100;	// normal step: 100ms
+	else
+		value += sign * 1000;	// large step: 1s
+	property = Clamp(value / 1000.0f, minimum, maximum);
+}
+
+void PrintMenuTitle(HANDLE hOut, MenuMode menu, bool component_enabled, char const * const on_text, char const * const off_text)
+{
+	DWORD written;
+	bool const menu_selected = (menu_active == menu);
+	bool const title_selected = menu_selected && menu_item[menu] == 0;
+	WORD const title_attrib = menu_title_attrib[component_enabled][menu_selected + title_selected];
+
+	// print menu name
+	COORD const pos = menu_pos[menu];
+	FillConsoleOutputAttribute(hOut, title_attrib, 18, pos, &written);
+	PrintConsole(hOut, pos, "F%d %-15s", menu + 1, menu_name[menu]);
+
+	if (char const *text = component_enabled ? on_text : off_text)
+	{
+		// print component enabled
+		COORD const pos = { menu_pos[menu].X + 15, menu_pos[menu].Y };
+		WORD const enable_attrib = (title_attrib & 0xF8) | (component_enabled ? FOREGROUND_GREEN : (menu_selected ? FOREGROUND_RED : 0));
+		FillConsoleOutputAttribute(hOut, enable_attrib, 3, pos, &written);
+		PrintConsole(hOut, pos, "%3s", text);
+	}
+}
+
+void ShowMarker(HANDLE hOut, MenuMode menu, int item)
+{
+	COORD const zero = { 0, 0 };
+	CHAR_INFO const left = { 0x10, FOREGROUND_RED | FOREGROUND_GREEN | FOREGROUND_INTENSITY };
+	CHAR_INFO const right = { 0x11, FOREGROUND_RED | FOREGROUND_GREEN | FOREGROUND_INTENSITY };
+	COORD const size = { 1, 1 };
+	SMALL_RECT region;
+
+	region.Left = region.Right = menu_pos[menu].X - 1;
+	region.Top = region.Bottom = menu_pos[menu].Y + item;
+	WriteConsoleOutput(hOut, &left, size, zero, &region);
+	region.Left = region.Right = menu_pos[menu].X + 18;
+	WriteConsoleOutput(hOut, &right, size, zero, &region);
+}
+
+void HideMarker(HANDLE hOut, MenuMode menu, int item)
+{
+	COORD const zero = { 0, 0 };
+	CHAR_INFO const blank = { 0, FOREGROUND_RED | FOREGROUND_GREEN | FOREGROUND_BLUE };
+	COORD const size = { 1, 1 };
+	SMALL_RECT region;
+
+	region.Left = region.Right = menu_pos[menu].X - 1;
+	region.Top = region.Bottom = menu_pos[menu].Y + item;
+	WriteConsoleOutput(hOut, &blank, size, zero, &region);
+	region.Left = region.Right = menu_pos[menu].X + 18;
+	WriteConsoleOutput(hOut, &blank, size, zero, &region);
+}
+
+void UpdateOscillatorFrequencyDisplay(HANDLE hOut, int o);
+
 void MenuOSC(HANDLE hOut, WORD key, DWORD modifiers, MenuMode menu)
 {
 	int const o = menu - MENU_OSC1;
@@ -1580,14 +1706,25 @@ void MenuOSC(HANDLE hOut, WORD key, DWORD modifiers, MenuMode menu)
 
 	switch (key)
 	{
+	case 0:
+		if (menu_active == menu)
+			ShowMarker(hOut, menu, menu_item[menu]);
+		else
+			HideMarker(hOut, menu, menu_item[menu]);
+		break;
+
 	case VK_UP:
+		HideMarker(hOut, menu, menu_item[menu]);
 		if (--menu_item[menu] < 0)
-			menu_item[menu] = 6 + (o > 0);
+			menu_item[menu] = 7 + (o > 0);
+		ShowMarker(hOut, menu, menu_item[menu]);
 		break;
 
 	case VK_DOWN:
-		if (++menu_item[menu] > 6 + (o > 0))
+		HideMarker(hOut, menu, menu_item[menu]);
+		if (++menu_item[menu] > 7 + (o > 0))
 			menu_item[menu] = 0;
+		ShowMarker(hOut, menu, menu_item[menu]);
 		break;
 
 	case VK_LEFT:
@@ -1596,29 +1733,32 @@ void MenuOSC(HANDLE hOut, WORD key, DWORD modifiers, MenuMode menu)
 		switch (menu_item[menu])
 		{
 		case 0:
+			osc_config[o].enable = (key == VK_RIGHT);
+			break;
+		case 1:
 			osc_config[o].wavetype = Wave((osc_config[o].wavetype + WAVE_COUNT + sign) % WAVE_COUNT);
 			for (int k = 0; k < KEYS; ++k)
 				osc_state[k][o].Reset();
 			break;
-		case 1:
+		case 2:
 			UpdatePercentageProperty(osc_config[o].waveparam_base, sign, modifiers, 0, 1);
 			break;
-		case 2:
+		case 3:
 			UpdateFrequencyProperty(osc_config[o].frequency_base, sign, modifiers, -5, 5);
 			break;
-		case 3:
+		case 4:
 			UpdatePercentageProperty(osc_config[o].amplitude_base, sign, modifiers, -10, 10);
 			break;
-		case 4:
+		case 5:
 			UpdatePercentageProperty(osc_config[o].waveparam_lfo, sign, modifiers, -10, 10);
 			break;
-		case 5:
+		case 6:
 			UpdateFrequencyProperty(osc_config[o].frequency_lfo, sign, modifiers, -5, 5);
 			break;
-		case 6:
+		case 7:
 			UpdatePercentageProperty(osc_config[o].amplitude_lfo, sign, modifiers, -10, 10);
 			break;
-		case 7:
+		case 8:
 			if (key == VK_RIGHT)
 			{
 				osc_config[o].sync_enable = true;
@@ -1633,15 +1773,17 @@ void MenuOSC(HANDLE hOut, WORD key, DWORD modifiers, MenuMode menu)
 		break;
 	}
 
-	FillConsoleOutputAttribute(hOut, menu_title_attrib[menu_active == menu], 18, pos, &written);
+	// menu title
+	bool const component_enabled = osc_config[o].enable;
+	bool const menu_selected = menu_active == menu;
+	int const item_selected = menu_selected ? menu_item[menu] : -1;
+	PrintMenuTitle(hOut, menu, component_enabled, NULL, "OFF");
 
-	for (int i = 0; i < 7 + (o > 0); ++i)
+	for (int i = 1; i <= 7 + (o > 0); ++i)
 	{
-		COORD p = { pos.X, SHORT(pos.Y + 1 + i) };
-		FillConsoleOutputAttribute(hOut, menu_item_attrib[menu_active == menu && menu_item[menu] == i], 18, p, &written);
+		COORD p = { pos.X, SHORT(pos.Y + i) };
+		FillConsoleOutputAttribute(hOut, menu_item_attrib[item_selected == i], 18, p, &written);
 	}
-
-	PrintConsole(hOut, pos, "F%d OSC%d", menu + 1, o + 1);
 
 	++pos.Y;
 	PrintConsole(hOut, pos, "%-18s", wave_name[osc_config[o].wavetype]);
@@ -1668,7 +1810,7 @@ void MenuOSC(HANDLE hOut, WORD key, DWORD modifiers, MenuMode menu)
 	{
 		++pos.Y;
 		PrintConsole(hOut, pos, "Hard Sync:     %3s", osc_config[o].sync_enable ? "ON" : "OFF");
-		WORD const attrib = menu_item_attrib[menu_active == menu && menu_item[menu] == 7];
+		WORD const attrib = menu_item_attrib[item_selected == 8];
 		COORD const pos2 = { pos.X + 15, pos.Y };
 		FillConsoleOutputAttribute(hOut, (attrib & 0xF8) | (osc_config[o].sync_enable ? FOREGROUND_GREEN : FOREGROUND_RED), 3, pos2, &written);
 	}
@@ -1686,35 +1828,50 @@ void MenuOSC2(HANDLE hOut, WORD key, DWORD modifiers)
 
 void MenuLFO(HANDLE hOut, WORD key, DWORD modifiers)
 {
-	COORD pos = menu_pos[MENU_LFO];
+	MenuMode const menu = MENU_LFO;
+	COORD pos = menu_pos[menu];
 	DWORD written;
 	int sign;
 
 	switch (key)
 	{
+	case 0:
+		if (menu_active == menu)
+			ShowMarker(hOut, menu, menu_item[menu]);
+		else
+			HideMarker(hOut, menu, menu_item[menu]);
+		break;
+
 	case VK_UP:
-		if (--menu_item[MENU_LFO] < 0)
-			menu_item[MENU_LFO] = 2;
+		HideMarker(hOut, menu, menu_item[menu]);
+		if (--menu_item[menu] < 0)
+			menu_item[menu] = 3;
+		ShowMarker(hOut, menu, menu_item[menu]);
 		break;
 
 	case VK_DOWN:
-		if (++menu_item[MENU_LFO] > 2)
-			menu_item[MENU_LFO] = 0;
+		HideMarker(hOut, menu, menu_item[menu]);
+		if (++menu_item[menu] > 3)
+			menu_item[menu] = 0;
+		ShowMarker(hOut, menu, menu_item[menu]);
 		break;
 
 	case VK_LEFT:
 	case VK_RIGHT:
 		sign = (key == VK_RIGHT) ? 1 : -1;
-		switch (menu_item[MENU_LFO])
+		switch (menu_item[menu])
 		{
 		case 0:
+			lfo_config.enable = (key == VK_RIGHT);
+			break;
+		case 1:
 			lfo_config.wavetype = Wave((lfo_config.wavetype + WAVE_COUNT + sign) % WAVE_COUNT);
 			lfo_state.Reset();
 			break;
-		case 1:
+		case 2:
 			UpdatePercentageProperty(lfo_config.waveparam, sign, modifiers, 0, 1);
 			break;
-		case 2:
+		case 3:
 			UpdateFrequencyProperty(lfo_config.frequency_base, sign, modifiers, -8, 14);
 			lfo_config.frequency = powf(2.0f, lfo_config.frequency_base);
 			break;
@@ -1722,15 +1879,17 @@ void MenuLFO(HANDLE hOut, WORD key, DWORD modifiers)
 		break;
 	}
 
-	FillConsoleOutputAttribute(hOut, menu_title_attrib[menu_active == MENU_LFO], 18, pos, &written);
+	// menu title
+	bool const component_enabled = lfo_config.enable;
+	bool const menu_selected = menu_active == menu;
+	int const item_selected = menu_selected ? menu_item[menu] : -1;
+	PrintMenuTitle(hOut, menu, component_enabled, "ON", "OFF");
 
-	for (int i = 0; i < 3; ++i)
+	for (int i = 1; i <= 3; ++i)
 	{
-		COORD p = { pos.X, SHORT(pos.Y + 1 + i) };
-		FillConsoleOutputAttribute(hOut, menu_item_attrib[menu_active == MENU_LFO && menu_item[MENU_LFO] == i], 18, p, &written);
+		COORD p = { pos.X, SHORT(pos.Y + i) };
+		FillConsoleOutputAttribute(hOut, menu_item_attrib[item_selected == i], 18, p, &written);
 	}
-
-	PrintConsole(hOut, pos, "F%d LFO", MENU_LFO + 1);
 
 	++pos.Y;
 	PrintConsole(hOut, pos, "%-18s", wave_name[lfo_config.wavetype]);
@@ -1744,76 +1903,90 @@ void MenuLFO(HANDLE hOut, WORD key, DWORD modifiers)
 
 void MenuFLT(HANDLE hOut, WORD key, DWORD modifiers)
 {
-	COORD pos = menu_pos[MENU_FLT];
+	MenuMode const menu = MENU_FLT;
+	COORD pos = menu_pos[menu];
 	DWORD written;
 	int sign;
 
 	switch (key)
 	{
+	case 0:
+		if (menu_active == menu)
+			ShowMarker(hOut, menu, menu_item[menu]);
+		else
+			HideMarker(hOut, menu, menu_item[menu]);
+		break;
+
 	case VK_UP:
-		if (--menu_item[MENU_FLT] < 0)
-			menu_item[MENU_FLT] = 8;
+		HideMarker(hOut, menu, menu_item[menu]);
+		if (--menu_item[menu] < 0)
+			menu_item[menu] = 9;
+		ShowMarker(hOut, menu, menu_item[menu]);
 		break;
 
 	case VK_DOWN:
-		if (++menu_item[MENU_FLT] > 8)
-			menu_item[MENU_FLT] = 0;
+		HideMarker(hOut, menu, menu_item[menu]);
+		if (++menu_item[menu] > 9)
+			menu_item[menu] = 0;
+		ShowMarker(hOut, menu, menu_item[menu]);
 		break;
 
 	case VK_LEFT:
 	case VK_RIGHT:
 		sign = (key == VK_RIGHT) ? 1 : -1;
-		switch (menu_item[MENU_FLT])
+		switch (menu_item[menu])
 		{
 		case 0:
-			flt_config.mode = FilterConfig::Mode((flt_config.mode + FilterConfig::COUNT + sign) % FilterConfig::COUNT);
+			flt_config.enable = (key == VK_RIGHT);
+			flt_env_config.enable = (key == VK_RIGHT);
 			break;
 		case 1:
-			UpdatePercentageProperty(flt_config.resonance, sign, modifiers, 0, 4);
+			flt_config.mode = FilterConfig::Mode((flt_config.mode + FilterConfig::COUNT + sign) % FilterConfig::COUNT);
 			break;
 		case 2:
-			UpdateFrequencyProperty(flt_config.cutoff_base, sign, modifiers, -10, 10);
+			UpdatePercentageProperty(flt_config.resonance, sign, modifiers, 0, 4);
 			break;
 		case 3:
-			UpdateFrequencyProperty(flt_config.cutoff_lfo, sign, modifiers, -10, 10);
+			UpdateFrequencyProperty(flt_config.cutoff_base, sign, modifiers, -10, 10);
 			break;
 		case 4:
-			UpdateFrequencyProperty(flt_config.cutoff_env, sign, modifiers, -10, 10);
+			UpdateFrequencyProperty(flt_config.cutoff_lfo, sign, modifiers, -10, 10);
 			break;
 		case 5:
-			if (key == VK_RIGHT)
-				flt_env_config.attack_rate *= 2.0f;
-			else
-				flt_env_config.attack_rate *= 0.5f;
+			UpdateFrequencyProperty(flt_config.cutoff_env, sign, modifiers, -10, 10);
 			break;
 		case 6:
-			if (key == VK_RIGHT)
-				flt_env_config.decay_rate *= 2.0f;
-			else
-				flt_env_config.decay_rate *= 0.5f;
+			UpdateTimeProperty(flt_env_config.attack_time, sign, modifiers, 0, 10);
+			flt_env_config.attack_rate = 1.0f / Max(flt_env_config.attack_time, 0.0001f);
 			break;
 		case 7:
-			UpdatePercentageProperty(flt_env_config.sustain_level, sign, modifiers, 0, 1);
+			UpdateTimeProperty(flt_env_config.decay_time, sign, modifiers, 0, 10);
+			flt_env_config.decay_rate = 1.0f / Max(flt_env_config.decay_time, 0.0001f);
 			break;
 		case 8:
-			if (key == VK_RIGHT)
-				flt_env_config.release_rate *= 2.0f;
-			else
-				flt_env_config.release_rate *= 0.5f;
+			UpdatePercentageProperty(flt_env_config.sustain_level, sign, modifiers, 0, 1);
+			break;
+		case 9:
+			UpdateTimeProperty(flt_env_config.release_time, sign, modifiers, 0, 10);
+			flt_env_config.release_rate = 1.0f / Max(flt_env_config.release_time, 0.0001f);
 			break;
 		}
 		break;
 	}
 
-	FillConsoleOutputAttribute(hOut, menu_title_attrib[menu_active == MENU_FLT], 18, pos, &written);
+	// menu title
+	bool const component_enabled = flt_config.enable;
+	bool const menu_selected = menu_active == menu;
+	int const item_selected = menu_selected ? menu_item[menu] : -1;
+	PrintMenuTitle(hOut, menu, component_enabled, "ON", "OFF");
 
-	for (int i = 0; i < 9; ++i)
+	for (int i = 1; i <= 9; ++i)
 	{
-		COORD p = { pos.X, SHORT(pos.Y + 1 + i) };
-		FillConsoleOutputAttribute(hOut, menu_item_attrib[menu_active == MENU_FLT && menu_item[MENU_FLT] == i], 18, p, &written);
+		COORD p = { pos.X, SHORT(pos.Y + i) };
+		FillConsoleOutputAttribute(hOut, menu_item_attrib[item_selected == i], 18, p, &written);
 	}
 
-	PrintConsole(hOut, pos, "F%d FLT", MENU_FLT + 1);
+	PrintConsole(hOut, pos, "F%d FLT         %3s", menu + 1, flt_config.enable ? "ON" : "OFF");
 
 	++pos.Y;
 	PrintConsole(hOut, pos, "%-18s", filter_name[flt_config.mode]);
@@ -1831,144 +2004,183 @@ void MenuFLT(HANDLE hOut, WORD key, DWORD modifiers)
 	PrintConsole(hOut, pos, "Cutoff ENV:% 7.2f", flt_config.cutoff_env * 12.0f);
 
 	++pos.Y;
-	PrintConsole(hOut, pos, "Attack:   %5g", flt_env_config.attack_rate);
+	PrintConsole(hOut, pos, "Attack:   %7.3fs", flt_env_config.attack_time);
 
 	++pos.Y;
-	PrintConsole(hOut, pos, "Decay:    %5g", flt_env_config.decay_rate);
+	PrintConsole(hOut, pos, "Decay:    %7.3fs", flt_env_config.decay_time);
 
 	++pos.Y;
 	PrintConsole(hOut, pos, "Sustain:    %5.1f%%", flt_env_config.sustain_level * 100.0f);
 
 	++pos.Y;
-	PrintConsole(hOut, pos, "Release:  %5g", flt_env_config.release_rate);
+	PrintConsole(hOut, pos, "Release:  %7.3fs", flt_env_config.release_time);
 }
 
 void MenuVOL(HANDLE hOut, WORD key, DWORD modifiers)
 {
-	COORD pos = menu_pos[MENU_VOL];
+	MenuMode const menu = MENU_VOL;
+	COORD pos = menu_pos[menu];
 	DWORD written;
 	int sign;
 
 	switch (key)
 	{
+	case 0:
+		if (menu_active == menu)
+			ShowMarker(hOut, menu, menu_item[menu]);
+		else
+			HideMarker(hOut, menu, menu_item[menu]);
+		break;
+
 	case VK_UP:
-		if (--menu_item[MENU_VOL] < 0)
-			menu_item[MENU_VOL] = 3;
+		HideMarker(hOut, menu, menu_item[menu]);
+		if (--menu_item[menu] < 0)
+			menu_item[menu] = 4;
+		ShowMarker(hOut, menu, menu_item[menu]);
 		break;
 
 	case VK_DOWN:
-		if (++menu_item[MENU_VOL] > 3)
-			menu_item[MENU_VOL] = 0;
+		HideMarker(hOut, menu, menu_item[menu]);
+		if (++menu_item[menu] > 4)
+			menu_item[menu] = 0;
+		ShowMarker(hOut, menu, menu_item[menu]);
 		break;
 
 	case VK_LEFT:
 	case VK_RIGHT:
 		sign = (key == VK_RIGHT) ? 1 : -1;
-		switch (menu_item[MENU_VOL])
+		switch (menu_item[menu])
 		{
 		case 0:
-			if (key == VK_RIGHT)
-				vol_env_config.attack_rate *= 2.0f;
-			else
-				vol_env_config.attack_rate *= 0.5f;
+			vol_env_config.enable = (key == VK_RIGHT);
 			break;
 		case 1:
-			if (key == VK_RIGHT)
-				vol_env_config.decay_rate *= 2.0f;
-			else
-				vol_env_config.decay_rate *= 0.5f;
+			UpdateTimeProperty(vol_env_config.attack_time, sign, modifiers, 0, 10);
+			vol_env_config.attack_rate = 1.0f / Max(vol_env_config.attack_time, 0.0001f);
 			break;
 		case 2:
-			UpdatePercentageProperty(vol_env_config.sustain_level, sign, modifiers, 0, 1);
+			UpdateTimeProperty(vol_env_config.decay_time, sign, modifiers, 0, 10);
+			vol_env_config.decay_rate = 1.0f / Max(vol_env_config.decay_time, 0.0001f);
 			break;
 		case 3:
-			if (key == VK_RIGHT)
-				vol_env_config.release_rate *= 2.0f;
-			else
-				vol_env_config.release_rate *= 0.5f;
+			UpdatePercentageProperty(vol_env_config.sustain_level, sign, modifiers, 0, 1);
+			break;
+		case 4:
+			UpdateTimeProperty(vol_env_config.release_time, sign, modifiers, 0, 10);
+			vol_env_config.release_rate = 1.0f / Max(vol_env_config.release_time, 0.0001f);
 			break;
 		}
 		break;
 	}
 
-	FillConsoleOutputAttribute(hOut, menu_title_attrib[menu_active == MENU_VOL], 18, pos, &written);
+	// menu title
+	bool const component_enabled = vol_env_config.enable;
+	bool const menu_selected = menu_active == menu;
+	int const item_selected = menu_selected ? menu_item[menu] : -1;
+	PrintMenuTitle(hOut, menu, component_enabled, "ON", "OFF");
 
-	for (int i = 0; i < 4; ++i)
+	for (int i = 1; i <= 4; ++i)
 	{
-		COORD p = { pos.X, SHORT(pos.Y + 1 + i) };
-		FillConsoleOutputAttribute(hOut, menu_item_attrib[menu_active == MENU_VOL && menu_item[MENU_VOL] == i], 18, p, &written);
+		COORD p = { pos.X, SHORT(pos.Y + i) };
+		FillConsoleOutputAttribute(hOut, menu_item_attrib[item_selected == i], 18, p, &written);
 	}
 
-	PrintConsole(hOut, pos, "F%d VOL", MENU_VOL + 1);
+	PrintConsole(hOut, pos, "F%d VOL", menu + 1);
 
 	++pos.Y;
-	PrintConsole(hOut, pos, "Attack:   %5g", vol_env_config.attack_rate);
+	PrintConsole(hOut, pos, "Attack:   %7.3fs", vol_env_config.attack_time);
 
 	++pos.Y;
-	PrintConsole(hOut, pos, "Decay:    %5g", vol_env_config.decay_rate);
+	PrintConsole(hOut, pos, "Decay:    %7.3fs", vol_env_config.decay_time);
 
 	++pos.Y;
 	PrintConsole(hOut, pos, "Sustain:    %5.1f%%", vol_env_config.sustain_level * 100.0f);
 
 	++pos.Y;
-	PrintConsole(hOut, pos, "Release:  %5g", vol_env_config.release_rate);
+	PrintConsole(hOut, pos, "Release:  %7.3fs", vol_env_config.release_time);
 }
 
-static void EnableEffect(int index)
+static void EnableEffect(int index, bool enable)
 {
-	if (!fx[index])
+	if (enable)
 	{
-		// set the effect, not bothering with parameters (use defaults)
-		fx[index] = BASS_ChannelSetFX(stream, BASS_FX_DX8_CHORUS + index, 0);
+		if (!fx[index])
+		{
+			// set the effect, not bothering with parameters (use defaults)
+			fx[index] = BASS_ChannelSetFX(stream, BASS_FX_DX8_CHORUS + index, 0);
+		}
 	}
-}
-
-static void DisableEffect(int index)
-{
-	if (fx[index])
+	else
 	{
-		BASS_ChannelRemoveFX(stream, fx[index]);
-		fx[index] = 0;
+		if (fx[index])
+		{
+			BASS_ChannelRemoveFX(stream, fx[index]);
+			fx[index] = 0;
+		}
 	}
 }
 
 void MenuFX(HANDLE hOut, WORD key, DWORD modifiers)
 {
-	COORD pos = menu_pos[MENU_FX];
+	MenuMode const menu = MENU_FX;
+	COORD pos = menu_pos[menu];
 	DWORD written;
 
 	switch (key)
 	{
+	case 0:
+		if (menu_active == menu)
+			ShowMarker(hOut, menu, menu_item[menu]);
+		else
+			HideMarker(hOut, menu, menu_item[menu]);
+		break;
+
 	case VK_UP:
-		if (--menu_item[MENU_FX] < 0)
-			menu_item[MENU_FX] = ARRAY_SIZE(fx) - 1;
+		HideMarker(hOut, menu, menu_item[menu]);
+		if (--menu_item[menu] < 0)
+			menu_item[menu] = ARRAY_SIZE(fx);
+		ShowMarker(hOut, menu, menu_item[menu]);
 		break;
 
 	case VK_DOWN:
-		if (++menu_item[MENU_FX] > ARRAY_SIZE(fx) - 1)
-			menu_item[MENU_FX] = 0;
+		HideMarker(hOut, menu, menu_item[menu]);
+		if (++menu_item[menu] > ARRAY_SIZE(fx))
+			menu_item[menu] = 0;
+		ShowMarker(hOut, menu, menu_item[menu]);
 		break;
 
 	case VK_LEFT:
-		DisableEffect(menu_item[MENU_FX]);
-		break;
-
 	case VK_RIGHT:
-		EnableEffect(menu_item[MENU_FX]);
+		if (menu_item[menu] == 0)
+		{
+			// set master switch
+			fx_enable = (key == VK_RIGHT);
+			for (int i = 0; i < ARRAY_SIZE(fx); ++i)
+				EnableEffect(i, fx_enable && fx_active[i]);
+		}
+		else
+		{
+			// set item
+			fx_active[menu_item[menu] - 1] = (key == VK_RIGHT);
+			EnableEffect(menu_item[menu] - 1, fx_enable && fx_active[menu_item[menu] - 1]);
+		}
 		break;
 	}
 
-	PrintConsole(hOut, pos, "F%d FX", MENU_FX + 1);
-	FillConsoleOutputAttribute(hOut, menu_title_attrib[menu_active == MENU_FX], 18, pos, &written);
+	// menu title
+	bool const component_enabled = fx_enable;
+	bool const menu_selected = menu_active == menu;
+	int const item_selected = menu_selected ? menu_item[menu] : -1;
+	PrintMenuTitle(hOut, menu, component_enabled, "ON", "OFF");
 
 	for (int i = 0; i < ARRAY_SIZE(fx); ++i)
 	{
 		++pos.Y;
-		PrintConsole(hOut, pos, "%-11s    %3s", fx_name[i], fx[i] ? "ON" : "OFF");
-		WORD const attrib = menu_item_attrib[menu_active == MENU_FX && menu_item[MENU_FX] == i];
+		PrintConsole(hOut, pos, "%-11s    %3s", fx_name[i], fx_active[i] ? "ON" : "OFF");
+		WORD const attrib = menu_item_attrib[item_selected == i + 1];
 		FillConsoleOutputAttribute(hOut, attrib, 15, pos, &written);
 		COORD const pos2 = { pos.X + 15, pos.Y };
-		FillConsoleOutputAttribute(hOut, (attrib & 0xF8) | (fx[i] ? FOREGROUND_GREEN : FOREGROUND_RED), 3, pos2, &written);
+		FillConsoleOutputAttribute(hOut, (attrib & 0xF8) | (fx_active[i] ? FOREGROUND_GREEN : FOREGROUND_RED), 3, pos2, &written);
 	}
 }
 
@@ -2111,7 +2323,7 @@ void UpdateOscillatorWaveformDisplay(HANDLE hOut)
 	float const flt_env_amplitude = flt_env_state[k].amplitude;
 
 	// update volume envelope generator
-	float const vol_env_amplitude = vol_env_state[k].amplitude;
+	float const vol_env_amplitude = vol_env_config.enable ? vol_env_state[k].amplitude : 1;
 
 	// base phase delta
 	float const delta_base = key_freq / info.freq;
@@ -2154,7 +2366,7 @@ void UpdateOscillatorWaveformDisplay(HANDLE hOut)
 		filter.Clear();
 	}
 	// if the filter is enabled...
-	else if (flt_config.mode)
+	else if (flt_config.enable)
 	{
 		// get steps needed to advance OSC1 by the time step
 		// (subtracting the steps that the plot itself will take)
@@ -2164,6 +2376,9 @@ void UpdateOscillatorWaveformDisplay(HANDLE hOut)
 			// "rewind" oscillators so they'll end at zero phase
 			for (int o = 0; o < NUM_OSCILLATORS; ++o)
 			{
+				if (!config[o].enable)
+					continue;
+
 				state[o].phase -= step[osc_config[o].sync_enable ? 0 : o] * steps;
 				int const advance = FloorInt(state[o].phase);
 				state[o].phase -= advance;
@@ -2180,6 +2395,9 @@ void UpdateOscillatorWaveformDisplay(HANDLE hOut)
 				float value = 0.0f;
 				for (int o = 0; o < NUM_OSCILLATORS; ++o)
 				{
+					if (!config[o].enable)
+						continue;
+
 					if (config[o].sync_enable)
 						config[o].sync_phase = config[o].frequency / config[0].frequency;
 					value += vol_env_amplitude * config[o].amplitude * oscillator[config[o].wavetype](config[o], state[o], delta[o]);
@@ -2213,12 +2431,11 @@ void UpdateOscillatorWaveformDisplay(HANDLE hOut)
 	for (int x = 0; x < WAVEFORM_WIDTH; ++x)
 	{
 		// sum the oscillator outputs
-		float value = vol_env_amplitude * config[0].amplitude * oscillator[config[0].wavetype](config[0], state[0], delta[0]);
-		state[0].phase += step[0];
-		state[0].advance = FloorInt(state[0].phase);
-		state[0].phase -= state[0].advance;
-		for (int o = 1; o < NUM_OSCILLATORS; ++o)
+		float value = 0.0f;
+		for (int o = 0; o < NUM_OSCILLATORS; ++o)
 		{
+			if (!config[o].enable)
+				continue;
 			if (config[o].sync_enable)
 				config[o].sync_phase = config[o].frequency / config[0].frequency;
 			value += vol_env_amplitude * config[o].amplitude * oscillator[config[o].wavetype](config[o], state[o], delta[o]);
@@ -2227,7 +2444,7 @@ void UpdateOscillatorWaveformDisplay(HANDLE hOut)
 			state[o].phase -= state[o].advance * config[o].sync_phase;
 		}
 
-		if (flt_config.mode)
+		if (flt_config.enable)
 		{
 			// apply filter
 			value = filter.Update(flt_config, cutoff, value, step_base);
@@ -2270,7 +2487,8 @@ void UpdateOscillatorWaveformDisplay(HANDLE hOut)
 	WriteConsoleOutput(hOut, &buf[0][0], size, pos, &region);
 }
 
-void UpdateOscillatorFrequencyDisplay(HANDLE hOut)
+// show oscillator frequency
+void UpdateOscillatorFrequencyDisplay(HANDLE hOut, int o)
 {
 	// reference key
 	int const k = keyboard_most_recent;
@@ -2278,15 +2496,31 @@ void UpdateOscillatorFrequencyDisplay(HANDLE hOut)
 	// key frequency (taking octave shift into account)
 	float const key_freq = keyboard_frequency[k] * keyboard_timescale;
 
-	// show oscillator frequencies
-	for (int o = 0; o < 2; ++o)
+	// get attributes to use
+	MenuMode menu = MenuMode(MENU_OSC1 + o);
+	COORD const pos = { menu_pos[menu].X + 8, menu_pos[menu].Y };
+	bool const menu_selected = (menu_active == menu);
+	bool const title_selected = menu_selected && menu_item[menu] == 0;
+	WORD const title_attrib = menu_title_attrib[true][menu_selected + title_selected];
+	WORD const num_attrib = (title_attrib & 0xF8) | (FOREGROUND_GREEN);
+	WORD const unit_attrib = (title_attrib & 0xF8) | (FOREGROUND_RED | FOREGROUND_GREEN | FOREGROUND_BLUE);
+
+	// current frequency in Hz
+	float const freq = key_freq * osc_config[o].frequency;
+
+	if (freq >= 20000.0f)
 	{
-		COORD const pos = { menu_pos[MENU_OSC1 + o].X + 8, menu_pos[MENU_OSC1 + o].Y };
-		float const freq = key_freq * osc_config[o].frequency;
-		if (freq >= 20000.0f)
-			PrintConsole(hOut, pos, "%7.2fkHz", freq / 1000.0f);
-		else
-			PrintConsole(hOut, pos, "%8.2fHz", freq);
+		// print in kHz
+		PrintConsoleWithAttribute(hOut, pos, num_attrib, "%7.2f", freq / 1000.0f);
+		COORD const pos2 = { pos.X + 7, pos.Y };
+		PrintConsoleWithAttribute(hOut, pos2, unit_attrib, "kHz");
+	}
+	else
+	{
+		// print in Hz
+		PrintConsoleWithAttribute(hOut, pos, num_attrib, "%8.2f", freq);
+		COORD const pos2 = { pos.X + 8, pos.Y };
+		PrintConsoleWithAttribute(hOut, pos2, unit_attrib, "Hz");
 	}
 }
 
@@ -2434,8 +2668,8 @@ void main(int argc, char **argv)
 	PrintKeyOctave(hOut);
 	PrintAntialias(hOut);
 
-	// make only the first oscillator audible
-	osc_config[0].amplitude_base = 1.0f;
+	// enable the first oscillator
+	osc_config[0].enable = true;
 
 	// show all menus
 	for (int i = 0; i < MENU_COUNT - (info.dsver < 8); ++i)
@@ -2540,9 +2774,13 @@ void main(int argc, char **argv)
 							{
 								flt_env_state[k].state = EnvelopeState::ATTACK;
 							}
-							else
+							else if (flt_env_config.enable)
 							{
 								flt_env_state[k].state = EnvelopeState::RELEASE;
+							}
+							else
+							{
+								flt_env_state[k].state = EnvelopeState::OFF;
 							}
 						}
 						if (vol_env_state[k].gate != gate)
@@ -2567,9 +2805,13 @@ void main(int argc, char **argv)
 
 								vol_env_state[k].state = EnvelopeState::ATTACK;
 							}
-							else
+							else if (vol_env_config.enable)
 							{
 								vol_env_state[k].state = EnvelopeState::RELEASE;
+							}
+							else
+							{
+								vol_env_state[k].state = EnvelopeState::OFF;
 							}
 						}
 						break;
@@ -2587,8 +2829,12 @@ void main(int argc, char **argv)
 		// update the oscillator waveform display
 		UpdateOscillatorWaveformDisplay(hOut);
 
-		// update the oscillator frequency display
-		UpdateOscillatorFrequencyDisplay(hOut);
+		// update the oscillator frequency displays
+		for (int o = 0; o < 2; ++o)
+		{
+			if (osc_config[o].enable)
+				UpdateOscillatorFrequencyDisplay(hOut, o);
+		}
 
 		// update the low-frequency oscillator dispaly
 		UpdateLowFrequencyOscillatorDisplay(hOut);
