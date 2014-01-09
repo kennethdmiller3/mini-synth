@@ -405,7 +405,14 @@ public:
 	{
 		Reset();
 	}
+
+	// reset the oscillator
 	void Reset();
+
+	// start the oscillator
+	void Start();
+
+	// update the oscillator by one step
 	float Update(OscillatorConfig const &config, float frequency, float const step);
 };
 
@@ -454,6 +461,8 @@ public:
 		, amplitude_lfo(0.0f)
 	{
 	}
+
+	void Modulate(float lfo);
 };
 NoteOscillatorConfig osc_config[NUM_OSCILLATORS];
 // TO DO: keyboard follow dial?
@@ -522,6 +531,8 @@ public:
 		, amplitude(0.0f)
 	{
 	}
+
+	void Gate(EnvelopeConfig const &config, bool on);
 
 	float Update(EnvelopeConfig const &config, float const step);
 };
@@ -655,21 +666,21 @@ float const filter_mix[FilterConfig::COUNT][5] =
 	{  0,  0,  1,  0,  0 }, // LOWPASS_2,
 	{  0,  0,  0,  1,  0 }, // LOWPASS_3,
 	{  0,  0,  0,  0,  1 }, // LOWPASS_4,
-	{ -1,  1,  0,  0,  0 }, // HIGHPASS_1,
-	{ -1,  2, -1,  0,  0 }, // HIGHPASS_2,
-	{ -1,  3, -3,  1,  0 }, // HIGHPASS_3,
-	{ -1,  4, -6,  4, -1 }, // HIGHPASS_4,
-	{  0, -1,  1,  0,  0 }, // BANDPASS_1,				// LP(1) then HP(1)
-	{  0,  0, -1,  1,  0 }, // BANDPASS_1_LOWPASS_1,	// LP(2) then HP(1)
-	{  0,  0,  0, -1,  1 }, // BANDPASS_1_LOWPASS_2,	// LP(3) then HP(1)
-	{  0, -1,  2, -1,  0 }, // BANDPASS_1_HIGHPASS_1,	// LP(1) then HP(2)
-	{  0, -1,  3, -3,  1 }, // BANDPASS_1_HIGHPASS_2,	// LP(1) then HP(3)
-	{  0,  0, -1,  2, -1 }, // BANDPASS_2,				// LP(2) then HP(2)
-	{ -1,  2, -2,  0,  0 }, // NOTCH,					// HP(2) * LP(2)
-	{  0, -1,  2, -2,  0 }, // NOTCH_LOWPASS_1,			// LP(1) then HP(2) * LP(2)
-	{  0,  0, -1,  2, -2 }, // NOTCH_LOWPASS_2,			// LP(2) then HP(2) * LP(2)
-	{ -1,  3, -6,  4,  0 }, // PHASESHIFT,
-	{  0, -1,  3, -6,  4 }, // PHASESHIFT_LOWPASS_1,
+	{  1, -1,  0,  0,  0 }, // HIGHPASS_1,
+	{  1, -2,  1,  0,  0 }, // HIGHPASS_2,
+	{  1, -3,  3, -1,  0 }, // HIGHPASS_3,
+	{  1, -4,  6, -4,  1 }, // HIGHPASS_4,
+	{  0,  1, -1,  0,  0 }, // BANDPASS_1,				// LP(1) then HP(1)
+	{  0,  0,  1, -1,  0 }, // BANDPASS_1_LOWPASS_1,	// LP(2) then HP(1)
+	{  0,  0,  0,  1, -1 }, // BANDPASS_1_LOWPASS_2,	// LP(3) then HP(1)
+	{  0,  1, -2,  1,  0 }, // BANDPASS_1_HIGHPASS_1,	// LP(1) then HP(2)
+	{  0,  1, -3,  3, -1 }, // BANDPASS_1_HIGHPASS_2,	// LP(1) then HP(3)
+	{  0,  0,  1, -2,  1 }, // BANDPASS_2,				// LP(2) then HP(2)
+	{  1, -2,  2,  0,  0 }, // NOTCH,					// HP(2) * LP(2)
+	{  0,  1, -2,  2,  0 }, // NOTCH_LOWPASS_1,			// LP(1) then HP(2) * LP(2)
+	{  0,  0,  1, -2,  2 }, // NOTCH_LOWPASS_2,			// LP(2) then HP(2) * LP(2)
+	{  1, -3,  6, -4,  0 }, // PHASESHIFT,
+	{  0,  1, -3,  6, -4 }, // PHASESHIFT_LOWPASS_1,
 };
 
 // filter state
@@ -715,9 +726,9 @@ public:
 
 	FilterState()
 	{
-		Clear();
+		Reset();
 	}
-	void Clear(void);
+	void Reset(void);
 	void Setup(float const cutoff, float const resonance, float const step);
 	float Apply(float const input, float const mix[]);
 	float Update(FilterConfig const &config, float const cutoff, float const input, float const step);
@@ -845,11 +856,11 @@ int const wave_loop_cycle[WAVE_COUNT] =
 };
 
 // sine oscillator
-static inline float GetSineValue(float const phase)
+static __forceinline float GetSineValue(float const phase)
 {
 	return sinf(M_PI * 2.0f * phase);
 }
-static inline float GetSineSlope(float const phase)
+static __forceinline float GetSineSlope(float const phase)
 {
 	return cosf(M_PI * 2.0f * phase);
 }
@@ -884,7 +895,7 @@ float OscillatorSine(OscillatorConfig const &config, OscillatorState &state, flo
 // sawtooth oscillator
 // - 2/pi sum k=1..infinity sin(k*2*pi*phase)/n
 // - smoothed transition to reduce aliasing
-static inline float GetSawtoothValue(float const phase)
+static __forceinline float GetSawtoothValue(float const phase)
 {
 	return 1.0f - 2.0f * (phase - FloorInt(phase));
 }
@@ -919,8 +930,8 @@ float OscillatorSawtooth(OscillatorConfig const &config, OscillatorState &state,
 		}
 		else
 		{
-			value += PolyBLEP(state.phase, w);
-			value += PolyBLEP(state.phase - 1, w);
+			float const up_nearest = float(RoundInt(state.phase));
+			value += PolyBLEP(state.phase - up_nearest, w);
 		}
 	}
 #endif
@@ -932,7 +943,7 @@ float OscillatorSawtooth(OscillatorConfig const &config, OscillatorState &state,
 // - pulse width 0.5 is square wave
 // - 4/pi sum k=0..infinity sin((2*k+1)*2*pi*phase)/(2*k+1)
 // - smoothed transition to reduce aliasing
-static inline float GetPulseValue(float const phase, float const width)
+static __forceinline float GetPulseValue(float const phase, float const width)
 {
 	return phase - FloorInt(phase) < width ? 1.0f : -1.0f;
 }
@@ -1006,7 +1017,7 @@ float OscillatorPulse(OscillatorConfig const &config, OscillatorState &state, fl
 
 // triangle oscillator
 // - 8/pi**2 sum k=0..infinity (-1)**k sin((2*k+1)*2*pi*phase)/(2*k+1)**2
-static inline float GetTriangleValue(float const phase)
+static __forceinline float GetTriangleValue(float const phase)
 {
 	return fabsf(4 * (phase - FloorInt(phase - 0.25f)) - 3) - 1;
 }
@@ -1223,6 +1234,12 @@ void OscillatorState::Reset()
 	index = 0;
 }
 
+// start oscillator
+void OscillatorState::Start()
+{
+	Reset();
+}
+
 // update oscillator
 float OscillatorState::Update(OscillatorConfig const &config, float const frequency, float const step)
 {
@@ -1248,6 +1265,32 @@ float OscillatorState::Update(OscillatorConfig const &config, float const freque
 	}
 
 	return value;
+}
+
+// modulate note oscillator
+void NoteOscillatorConfig::Modulate(float lfo)
+{
+	// LFO wave wave parameter modulation
+	waveparam = waveparam_base + waveparam_lfo * lfo;
+
+	// LFO frequency modulation
+	frequency = powf(2.0f, frequency_base + frequency_lfo * lfo) * wave_adjust_frequency[wavetype];
+
+	// LFO amplitude modulation
+	amplitude = amplitude_base + amplitude_lfo * lfo;
+}
+
+// gate envelope generator
+void EnvelopeState::Gate(EnvelopeConfig const &config, bool on)
+{
+	if (gate == on)
+		return;
+
+	gate = on;
+	if (gate)
+		state = config.enable ? EnvelopeState::ATTACK : EnvelopeState::SUSTAIN;
+	else
+		state = config.enable ? EnvelopeState::RELEASE : EnvelopeState::OFF;
 }
 
 // update envelope generator
@@ -1298,7 +1341,7 @@ float EnvelopeState::Update(EnvelopeConfig const &config, float const step)
 	return amplitude;
 }
 
-void FilterState::Clear()
+void FilterState::Reset()
 {
 	feedback = 0.0f;
 #if FILTER == FILTER_NONLINEAR_MOOG
@@ -1464,14 +1507,7 @@ DWORD CALLBACK WriteStream(HSTREAM handle, short *buffer, DWORD length, void *us
 		// compute shared oscillator values
 		for (int o = 0; o < NUM_OSCILLATORS; ++o)
 		{
-			// LFO wave parameter modulation
-			osc_config[o].waveparam = osc_config[o].waveparam_base + osc_config[o].waveparam_lfo * lfo;
-
-			// LFO frequency modulation
-			osc_config[o].frequency = powf(2.0f, osc_config[o].frequency_base + osc_config[o].frequency_lfo * lfo) * wave_adjust_frequency[osc_config[o].wavetype];
-
-			// LFO amplitude modulation
-			osc_config[o].amplitude = osc_config[o].amplitude_base + osc_config[o].amplitude_lfo * lfo;
+			osc_config[o].Modulate(lfo);
 		}
 
 		return length;
@@ -1489,14 +1525,7 @@ DWORD CALLBACK WriteStream(HSTREAM handle, short *buffer, DWORD length, void *us
 		// compute shared oscillator values
 		for (int o = 0; o < NUM_OSCILLATORS; ++o)
 		{
-			// LFO wave parameter modulation
-			osc_config[o].waveparam = osc_config[o].waveparam_base + osc_config[o].waveparam_lfo * lfo;
-
-			// LFO frequency modulation
-			osc_config[o].frequency = powf(2.0f, osc_config[o].frequency_base + osc_config[o].frequency_lfo * lfo) * wave_adjust_frequency[osc_config[o].wavetype];
-
-			// LFO amplitude modulation
-			osc_config[o].amplitude = osc_config[o].amplitude_base + osc_config[o].amplitude_lfo * lfo;
+			osc_config[o].Modulate(lfo);
 		}
 
 		// accumulated sample value
@@ -2329,8 +2358,8 @@ void UpdateOscillatorWaveformDisplay(HANDLE hOut)
 	float const delta_base = key_freq / info.freq;
 
 	// local oscillators for plot
-	static NoteOscillatorConfig config[NUM_OSCILLATORS];
-	static OscillatorState state[NUM_OSCILLATORS];
+	NoteOscillatorConfig config[NUM_OSCILLATORS];
+	OscillatorState state[NUM_OSCILLATORS];
 	float step[NUM_OSCILLATORS];
 	float delta[NUM_OSCILLATORS];
 
@@ -2351,6 +2380,10 @@ void UpdateOscillatorWaveformDisplay(HANDLE hOut)
 	// local filter for plot
 	static FilterState filter;
 
+	// detect when to reset the filter
+	static bool prev_active;
+	static int prev_k;
+
 	// compute cutoff frequency
 	// (assume key follow)
 	float const cutoff = powf(2, flt_config.cutoff_base + flt_config.cutoff_lfo * lfo + flt_config.cutoff_env * flt_env_amplitude);
@@ -2360,13 +2393,20 @@ void UpdateOscillatorWaveformDisplay(HANDLE hOut)
 	DWORD deltaTime = timeGetTime() - prevTime;
 	prevTime += deltaTime;
 
-	// clear filter state if the volume is off
-	if (vol_env_state[k].state == EnvelopeState::OFF)
+	// reset filter state on playing a note
+	if (prev_k != k)
 	{
-		filter.Clear();
+		filter.Reset();
+		prev_k = k;
 	}
+	if (prev_active != (vol_env_state[k].state != EnvelopeState::OFF))
+	{
+		filter.Reset();
+		prev_active = (vol_env_state[k].state != EnvelopeState::OFF);
+	}
+
 	// if the filter is enabled...
-	else if (flt_config.enable)
+	if (flt_config.enable)
 	{
 		// get steps needed to advance OSC1 by the time step
 		// (subtracting the steps that the plot itself will take)
@@ -2400,7 +2440,7 @@ void UpdateOscillatorWaveformDisplay(HANDLE hOut)
 
 					if (config[o].sync_enable)
 						config[o].sync_phase = config[o].frequency / config[0].frequency;
-					value += vol_env_amplitude * config[o].amplitude * oscillator[config[o].wavetype](config[o], state[o], delta[o]);
+					value += config[o].amplitude * oscillator[config[o].wavetype](config[o], state[o], delta[o]);
 
 					state[o].phase += step[o];
 					state[o].advance = FloorInt(state[o].phase);
@@ -2409,6 +2449,9 @@ void UpdateOscillatorWaveformDisplay(HANDLE hOut)
 
 				// apply filter
 				value = filter.Update(flt_config, cutoff, value, step_base);
+
+				// apply volume envelope
+				value *= vol_env_amplitude;
 			}
 		}
 	}
@@ -2438,9 +2481,9 @@ void UpdateOscillatorWaveformDisplay(HANDLE hOut)
 				continue;
 			if (config[o].sync_enable)
 				config[o].sync_phase = config[o].frequency / config[0].frequency;
-			value += vol_env_amplitude * config[o].amplitude * oscillator[config[o].wavetype](config[o], state[o], delta[o]);
+			value += config[o].amplitude * oscillator[config[o].wavetype](config[o], state[o], delta[o]);
 			state[o].phase += step[o];
-			state[o].advance = int(state[o].phase / config[o].sync_phase);
+			state[o].advance = FloorInt(state[o].phase / config[o].sync_phase);
 			state[o].phase -= state[o].advance * config[o].sync_phase;
 		}
 
@@ -2449,6 +2492,9 @@ void UpdateOscillatorWaveformDisplay(HANDLE hOut)
 			// apply filter
 			value = filter.Update(flt_config, cutoff, value, step_base);
 		}
+
+		// apply volume envelope
+		value *= vol_env_amplitude;
 
 		// plot waveform column
 		int grid_y = FloorInt(-(WAVEFORM_HEIGHT - 0.5f) * value);
@@ -2765,55 +2811,33 @@ void main(int argc, char **argv)
 				{
 					if (keyin.Event.KeyEvent.wVirtualKeyCode == keys[k])
 					{
+						// gate filters based on key down
 						bool gate = (keyin.Event.KeyEvent.bKeyDown != 0);
-						if (flt_env_state[k].gate != gate)
-						{
-							flt_env_state[k].gate = gate;
 
-							if (flt_env_state[k].gate)
+						// gate the filter envelope
+						flt_env_state[k].Gate(flt_env_config, gate);
+
+						// if pressing the key
+						if (gate)
+						{
+							// save the note key
+							keyboard_most_recent = k;
+
+							// if the volume envelope is currently off...
+							if (vol_env_state[k].state == EnvelopeState::OFF)
 							{
-								flt_env_state[k].state = EnvelopeState::ATTACK;
-							}
-							else if (flt_env_config.enable)
-							{
-								flt_env_state[k].state = EnvelopeState::RELEASE;
-							}
-							else
-							{
-								flt_env_state[k].state = EnvelopeState::OFF;
+								// start the oscillator
+								// (assume restart on key)
+								for (int o = 0; o < NUM_OSCILLATORS; ++o)
+									osc_state[k][o].Start();
+
+								// start the filter
+								flt_state[k].Reset();
 							}
 						}
-						if (vol_env_state[k].gate != gate)
-						{
-							vol_env_state[k].gate = gate;
 
-							if (vol_env_state[k].gate)
-							{
-								if (vol_env_state[k].state == EnvelopeState::OFF)
-								{
-									// start the oscillator
-									// (assume restart on key)
-									for (int o = 0; o < NUM_OSCILLATORS; ++o)
-										osc_state[k][o].Reset();
-
-									// start the filter
-									flt_state[k].Clear();
-
-									// save the note key
-									keyboard_most_recent = k;
-								}
-
-								vol_env_state[k].state = EnvelopeState::ATTACK;
-							}
-							else if (vol_env_config.enable)
-							{
-								vol_env_state[k].state = EnvelopeState::RELEASE;
-							}
-							else
-							{
-								vol_env_state[k].state = EnvelopeState::OFF;
-							}
-						}
+						// gate the volume envelope
+						vol_env_state[k].Gate(vol_env_config, gate);
 						break;
 					}
 				}
