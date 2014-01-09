@@ -350,6 +350,24 @@ enum Wave
 	WAVE_COUNT
 };
 
+// sub-oscillator modes
+enum SubOscillatorMode
+{
+	SUBOSC_NONE,
+	SUBOSC_SQUARE_1OCT,
+	SUBOSC_SQUARE_2OCT,
+	SUBOSC_PULSE_2OCT,
+	SUBOSC_COUNT
+};
+
+const char * const sub_osc_name[SUBOSC_COUNT] =
+{
+	"None",
+	"\xDF\xDC",
+	"\xDF\xDF\xDC\xDC",
+	"\xDF\xDC\xDC\xDC",
+};
+
 // precomputed linear feedback shift register output
 static char poly4[(1 << 4) - 1];
 static char poly5[(1 << 5) - 1];
@@ -456,6 +474,10 @@ public:
 	float frequency_lfo;
 	float amplitude_lfo;
 
+	// sub oscillator
+	SubOscillatorMode sub_osc_mode;
+	float sub_osc_amplitude;
+
 	explicit NoteOscillatorConfig(bool const enable = false, Wave const wavetype = WAVE_SAWTOOTH, float const waveparam = 0.5f, float const frequency = 1.0f, float const amplitude = 1.0f)
 		: OscillatorConfig(enable, wavetype, waveparam, frequency, amplitude)
 		, waveparam_base(waveparam)
@@ -464,11 +486,14 @@ public:
 		, waveparam_lfo(0.0f)
 		, frequency_lfo(0.0f)
 		, amplitude_lfo(0.0f)
+		, sub_osc_mode(SUBOSC_NONE)
+		, sub_osc_amplitude(0.0f)
 	{
 	}
 
 	void Modulate(float lfo);
 };
+
 NoteOscillatorConfig osc_config[NUM_OSCILLATORS];
 // TO DO: keyboard follow dial?
 // TO DO: oscillator mixer
@@ -847,11 +872,11 @@ float const wave_adjust_frequency[WAVE_COUNT] =
 // - poly oscillators using the loop index to look up precomputed values
 int const wave_loop_cycle[WAVE_COUNT] =
 {
-	1,							// WAVE_SINE,
-	1,							// WAVE_PULSE,
-	1,							// WAVE_SAWTOOTH,
-	1,							// WAVE_TRIANGLE,
-	1,							// WAVE_NOISE,
+	INT_MAX,					// WAVE_SINE,
+	INT_MAX,					// WAVE_PULSE,
+	INT_MAX,					// WAVE_SAWTOOTH,
+	INT_MAX,					// WAVE_TRIANGLE,
+	INT_MAX,					// WAVE_NOISE,
 	ARRAY_SIZE(poly4),			// WAVE_POLY4,
 	ARRAY_SIZE(poly5),			// WAVE_POLY5,
 	ARRAY_SIZE(poly17),			// WAVE_POLY17,
@@ -1222,6 +1247,25 @@ OscillatorFunc const oscillator[WAVE_COUNT] =
 	OscillatorPoly4Poly5,	// WAVE_POLY4_POLY5,
 	OscillatorPoly17Poly5	// WAVE_POLY17_POLY5,
 };
+// sub-oscillator
+float SubOscillator(NoteOscillatorConfig const &config, OscillatorState const &state, float frequency, float step)
+{
+	float sub_value = (state.index & config.sub_osc_mode) ? -1.0f : 1.0f;
+	float const w = frequency * step * POLYBLEP_WIDTH;
+	if (state.phase < 0.5f)
+	{
+		float sub_prev = ((state.index - 1) & config.sub_osc_mode) ? -1.0f : 1.0f;
+		if (sub_value != sub_prev)
+			sub_value += 0.5f * (sub_value - sub_prev) * PolyBLEP(state.phase, w);
+	}
+	else
+	{
+		float sub_next = ((state.index + 1) & config.sub_osc_mode) ? -1.0f : 1.0f;
+		if (sub_value != sub_next)
+			sub_value += 0.5f * (sub_next - sub_value) * PolyBLEP(state.phase - 1, w);
+	}
+	return sub_value;
+}
 
 // reset oscillator
 void OscillatorState::Reset()
@@ -1577,13 +1621,20 @@ DWORD CALLBACK WriteStream(HSTREAM handle, short *buffer, DWORD length, void *us
 				continue;
 			}
 
-			// update oscillator
-			// (assume key follow)
-			float osc_value = osc_state[k][0].Update(osc_config[0], key_freq, step);
+			// set up sync phases
 			for (int o = 1; o < NUM_OSCILLATORS; ++o)
 			{
 				if (osc_config[o].sync_enable)
 					osc_config[o].sync_phase = osc_config[o].frequency / osc_config[0].frequency;
+			}
+
+			// update oscillator
+			// (assume key follow)
+			float osc_value = 0.0f;
+			for (int o = 0; o < NUM_OSCILLATORS; ++o)
+			{
+				if (osc_config[o].sub_osc_mode)
+					osc_value += osc_config[o].sub_osc_amplitude * SubOscillator(osc_config[o], osc_state[k][o], key_freq, step);
 				osc_value += osc_state[k][o].Update(osc_config[o], key_freq, step);
 			}
 
@@ -1767,13 +1818,13 @@ void MenuOSC(HANDLE hOut, WORD key, DWORD modifiers, MenuMode menu)
 	case VK_UP:
 		HideMarker(hOut, menu, menu_item[menu]);
 		if (--menu_item[menu] < 0)
-			menu_item[menu] = 7 + (o > 0);
+			menu_item[menu] = 9 + (o > 0);
 		ShowMarker(hOut, menu, menu_item[menu]);
 		break;
 
 	case VK_DOWN:
 		HideMarker(hOut, menu, menu_item[menu]);
-		if (++menu_item[menu] > 7 + (o > 0))
+		if (++menu_item[menu] > 9 + (o > 0))
 			menu_item[menu] = 0;
 		ShowMarker(hOut, menu, menu_item[menu]);
 		break;
@@ -1810,6 +1861,12 @@ void MenuOSC(HANDLE hOut, WORD key, DWORD modifiers, MenuMode menu)
 			UpdatePercentageProperty(osc_config[o].amplitude_lfo, sign, modifiers, -10, 10);
 			break;
 		case 8:
+			osc_config[o].sub_osc_mode = SubOscillatorMode((osc_config[o].sub_osc_mode + sign + SUBOSC_COUNT) % SUBOSC_COUNT);
+			break;
+		case 9:
+			UpdatePercentageProperty(osc_config[o].sub_osc_amplitude, sign, modifiers, -10, 10);
+			break;
+		case 10:
 			if (key == VK_RIGHT)
 			{
 				osc_config[o].sync_enable = true;
@@ -1830,7 +1887,7 @@ void MenuOSC(HANDLE hOut, WORD key, DWORD modifiers, MenuMode menu)
 	int const item_selected = menu_selected ? menu_item[menu] : -1;
 	PrintMenuTitle(hOut, menu, component_enabled, NULL, "OFF");
 
-	for (int i = 1; i <= 7 + (o > 0); ++i)
+	for (int i = 1; i <= 9 + (o > 0); ++i)
 	{
 		COORD p = { pos.X, SHORT(pos.Y + i) };
 		FillConsoleOutputAttribute(hOut, menu_item_attrib[item_selected == i], 18, p, &written);
@@ -1857,11 +1914,17 @@ void MenuOSC(HANDLE hOut, WORD key, DWORD modifiers, MenuMode menu)
 	++pos.Y;
 	PrintConsole(hOut, pos, "Ampl LFO: %+7.1f%%", osc_config[o].amplitude_lfo * 100.0f);
 
+	++pos.Y;
+	PrintConsole(hOut, pos, "Sub Osc:%10s", sub_osc_name[osc_config[o].sub_osc_mode]);
+
+	++pos.Y;
+	PrintConsole(hOut, pos, "Sub Ampl: % 7.1f%%", osc_config[o].sub_osc_amplitude * 100.0f);
+
 	if (o > 0)
 	{
 		++pos.Y;
 		PrintConsole(hOut, pos, "Hard Sync:     %3s", osc_config[o].sync_enable ? "ON" : "OFF");
-		WORD const attrib = menu_item_attrib[item_selected == 8];
+		WORD const attrib = menu_item_attrib[item_selected == 10];
 		COORD const pos2 = { pos.X + 15, pos.Y };
 		FillConsoleOutputAttribute(hOut, (attrib & 0xF8) | (osc_config[o].sync_enable ? FOREGROUND_GREEN : FOREGROUND_RED), 3, pos2, &written);
 	}
@@ -2339,6 +2402,7 @@ void UpdateKeyVolumeEnvelopeDisplay(HANDLE hOut, EnvelopeState::State vol_env_di
 	}
 }
 
+// waveform display settings
 void UpdateOscillatorWaveformDisplay(HANDLE hOut)
 {
 #define WAVEFORM_WIDTH 80
@@ -2361,8 +2425,24 @@ void UpdateOscillatorWaveformDisplay(HANDLE hOut)
 	// (assume it is constant for the duration)
 	float const lfo = lfo_state.Update(lfo_config, 1.0f, 0.0f);
 
+	// how many cycles to plot?
+	int cycle = wave_loop_cycle[osc_config[0].wavetype];
+	if (cycle == INT_MAX)
+	{
+		if (osc_config[0].sub_osc_mode == SUBOSC_NONE)
+			cycle = 1;
+		else if (osc_config[0].sub_osc_mode < SUBOSC_SQUARE_2OCT)
+			cycle = 2;
+		else
+			cycle = 4;
+	}
+	else if (cycle > WAVEFORM_WIDTH)
+	{
+		cycle = WAVEFORM_WIDTH;
+	}
+
 	// base phase step for plot
-	float const step_base = Clamp(wave_loop_cycle[osc_config[0].wavetype], 1, 80) / float(WAVEFORM_WIDTH);
+	float const step_base = cycle / float(WAVEFORM_WIDTH);
 
 	// reference key
 	int const k = keyboard_most_recent;
@@ -2455,6 +2535,8 @@ void UpdateOscillatorWaveformDisplay(HANDLE hOut)
 
 					if (config[o].sync_enable)
 						config[o].sync_phase = config[o].frequency / config[0].frequency;
+					if (config[o].sub_osc_mode)
+						value += config[o].sub_osc_amplitude * SubOscillator(config[o], state[o], 1, delta[o]);
 					value += state[o].Compute(config[o], delta[o]);
 					state[o].Advance(config[o], step[o]);
 				}
@@ -2493,6 +2575,8 @@ void UpdateOscillatorWaveformDisplay(HANDLE hOut)
 				continue;
 			if (config[o].sync_enable)
 				config[o].sync_phase = config[o].frequency / config[0].frequency;
+			if (config[o].sub_osc_mode)
+				value += config[o].sub_osc_amplitude * SubOscillator(config[o], state[o], 1, delta[o]);
 			value += state[o].Compute(config[o], delta[o]);
 			state[o].Advance(config[o], step[o]);
 		}
