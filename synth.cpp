@@ -398,7 +398,6 @@ class OscillatorState
 {
 public:
 	float phase;
-	int advance;
 	int index;
 
 	OscillatorState()
@@ -414,6 +413,12 @@ public:
 
 	// update the oscillator by one step
 	float Update(OscillatorConfig const &config, float frequency, float const step);
+
+	// compute the oscillator value
+	float Compute(OscillatorConfig const &config, float delta);
+
+	// advance the oscillator phase
+	void Advance(OscillatorConfig const &config, float delta);
 };
 
 // low-frequency oscillator configuration
@@ -1090,14 +1095,6 @@ float OscillatorPoly(OscillatorConfig const &config, OscillatorState &state, cha
 	if (step > 0.5f * cycle)
 		return 0;
 
-	// advance the wavetable index
-	state.index += state.advance;
-	if (state.index >= cycle)
-		state.index -= cycle;
-	else if (state.index < 0)
-		state.index += cycle;
-	state.advance = 0;
-
 	// current wavetable value
 	float value = poly[state.index] ? 1.0f : -1.0f;
 #if ANTIALIAS == ANTIALIAS_POLYBLEP
@@ -1230,7 +1227,6 @@ OscillatorFunc const oscillator[WAVE_COUNT] =
 void OscillatorState::Reset()
 {
 	phase = 0.0f;
-	advance = 0;
 	index = 0;
 }
 
@@ -1248,23 +1244,49 @@ float OscillatorState::Update(OscillatorConfig const &config, float const freque
 
 	float const delta = config.frequency * frequency * step;
 
-	// get oscillator value
-	float const value = config.amplitude * oscillator[config.wavetype](config, *this, delta);
+	// compute oscillator value
+	float const value = Compute(config, delta);
 
-	// accumulate oscillator phase
+	// advance oscillator phase
+	Advance(config, delta);
+
+	return value;
+}
+
+// compute the oscillator value
+float OscillatorState::Compute(OscillatorConfig const &config, float delta)
+{
+	return config.amplitude * oscillator[config.wavetype](config, *this, delta);
+}
+
+// advance the oscillator phase
+void OscillatorState::Advance(OscillatorConfig const &config, float delta)
+{
 	phase += delta;
 	if (phase >= config.sync_phase)
 	{
-		advance = FloorInt(phase / config.sync_phase);
+		// wrap phase around
+		int const advance = FloorInt(phase / config.sync_phase);
 		phase -= advance * config.sync_phase;
+
+		// advance the wavetable index
+		int const cycle = wave_loop_cycle[config.wavetype];
+		index += advance;
+		if (index >= cycle)
+			index -= cycle;
 	}
 	else if (phase < 0.0f)
 	{
-		advance = FloorInt(phase / config.sync_phase);
+		// wrap phase around
+		int const advance = FloorInt(phase / config.sync_phase);
 		phase -= advance * config.sync_phase;
-	}
 
-	return value;
+		// rewind the wavetable index
+		int const cycle = wave_loop_cycle[config.wavetype];
+		index += advance;
+		if (index < 0)
+			index += cycle;
+	}
 }
 
 // modulate note oscillator
@@ -2240,7 +2262,7 @@ void UpdateSpectrumAnalyzer(HANDLE hOut)
 	int b0 = Max(RoundInt(freq), 0);
 
 	// get power in each semitone band
-	static float spectrum[SPECTRUM_WIDTH] = { 0 };
+	float spectrum[SPECTRUM_WIDTH] = { 0 };
 	int xlimit = SPECTRUM_WIDTH;
 	for (int x = 0; x < SPECTRUM_WIDTH; ++x)
 	{
@@ -2418,14 +2440,7 @@ void UpdateOscillatorWaveformDisplay(HANDLE hOut)
 			{
 				if (!config[o].enable)
 					continue;
-
-				state[o].phase -= step[osc_config[o].sync_enable ? 0 : o] * steps;
-				int const advance = FloorInt(state[o].phase);
-				state[o].phase -= advance;
-				int const cycle = wave_loop_cycle[config[o].wavetype];
-				state[o].index = (state[o].index + advance) % cycle;
-				if (state[o].index < 0)
-					state[o].index += cycle;	// modulo of a negative value is negative
+				state[o].Advance(config[o], step[config[o].sync_enable ? 0 : o] * steps);
 			}
 
 			// run the filter ahead for next time
@@ -2440,11 +2455,8 @@ void UpdateOscillatorWaveformDisplay(HANDLE hOut)
 
 					if (config[o].sync_enable)
 						config[o].sync_phase = config[o].frequency / config[0].frequency;
-					value += config[o].amplitude * oscillator[config[o].wavetype](config[o], state[o], delta[o]);
-
-					state[o].phase += step[o];
-					state[o].advance = FloorInt(state[o].phase);
-					state[o].phase -= state[o].advance;
+					value += state[o].Compute(config[o], delta[o]);
+					state[o].Advance(config[o], step[o]);
 				}
 
 				// apply filter
@@ -2481,10 +2493,8 @@ void UpdateOscillatorWaveformDisplay(HANDLE hOut)
 				continue;
 			if (config[o].sync_enable)
 				config[o].sync_phase = config[o].frequency / config[0].frequency;
-			value += config[o].amplitude * oscillator[config[o].wavetype](config[o], state[o], delta[o]);
-			state[o].phase += step[o];
-			state[o].advance = FloorInt(state[o].phase / config[o].sync_phase);
-			state[o].phase -= state[o].advance * config[o].sync_phase;
+			value += state[o].Compute(config[o], delta[o]);
+			state[o].Advance(config[o], step[o]);
 		}
 
 		if (flt_config.enable)
