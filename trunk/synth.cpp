@@ -2,14 +2,12 @@
 MINI VIRTUAL ANALOG SYNTHESIZER
 Copyright 2014 Kenneth D. Miller III
 */
+#include "StdAfx.h"
 
-#include <windows.h>
-#include <stdio.h>
-#include <conio.h>
-#include <math.h>
-#include <float.h>
-#include <assert.h>
-#include "bass.h"
+#include "Debug.h"
+#include "Console.h"
+#include "Math.h"
+#include "Random.h"
 
 BASS_INFO info;
 HSTREAM stream; // the stream
@@ -34,168 +32,13 @@ CHAR_INFO const bar_nyquist = { 0, BACKGROUND_RED };
 
 #define NUM_OSCILLATORS 2
 
-// debug output
-int DebugPrint(char const *format, ...)
-{
-	va_list ap;
-	va_start(ap, format);
-#ifdef WIN32
-	char buf[4096];
-	int n = vsnprintf_s(buf, sizeof(buf), format, ap);
-	OutputDebugStringA(buf);
-#else
-	int n = vfprintf(stderr, format, ap);
-#endif
-	va_end(ap);
-	return n;
-}
-
-// get the last error message
-void GetLastErrorMessage(CHAR buf[], DWORD size)
-{
-	FormatMessage(FORMAT_MESSAGE_FROM_SYSTEM, NULL, GetLastError(), MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT), buf, size, NULL);
-}
-
-// formatted write console output
-int PrintConsole(HANDLE out, COORD pos, char const *format, ...)
-{
-	va_list ap;
-	va_start(ap, format);
-	char buf[256];
-	vsnprintf_s(buf, sizeof(buf), format, ap);
-	DWORD written;
-	WriteConsoleOutputCharacter(out, buf, strlen(buf), pos, &written);
-	return written;
-}
-
-// formatted write console output with an attribute
-int PrintConsoleWithAttribute(HANDLE out, COORD pos, WORD attrib, char const *format, ...)
-{
-	va_list ap;
-	va_start(ap, format);
-	char buf[256];
-	vsnprintf_s(buf, sizeof(buf), format, ap);
-	DWORD written;
-	WriteConsoleOutputCharacter(out, buf, strlen(buf), pos, &written);
-	FillConsoleOutputAttribute(out, attrib, written, pos, &written);
-	return written;
-}
-
-// display error messages
+// display error message, clean up, and exit
 void Error(char const *text)
 {
 	fprintf(stderr, "Error(%d): %s\n", BASS_ErrorGetCode(), text);
 	BASS_Free();
 	ExitProcess(0);
 }
-
-#ifndef M_PI
-#define M_PI 3.14159265358979323846f
-#endif
-
-#define ARRAY_SIZE(x) (sizeof(x)/sizeof(x[0]))
-
-// some useful template functions
-template<typename T> static inline T Squared(T x)
-{
-	return x * x;
-}
-template<typename T> static inline T Clamp(T x, T a, T b)
-{
-	if (x < a)
-		return a;
-	if (x > b)
-		return b;
-	return x;
-}
-template<typename T> static inline T Min(T a, T b)
-{
-	return a < b ? a : b;
-}
-template<typename T> static inline T Max(T a, T b)
-{
-	return a > b ? a : b;
-}
-
-// fast approximation of tanh()
-static inline float FastTanh(float x)
-{
-	if (x < -3)
-		return -1;
-	if (x > 3)
-		return 1;
-	return x * (27 + x * x) / (27 + 9 * x * x);
-}
-
-// Fast float-to-integer conversions based on an article by Laurent de Soras
-// http://ldesoras.free.fr/doc/articles/rounding_en.pdf
-// The input value must be in the interval [-2**30, 2**30-1]
-
-// fast integer round
-static inline int RoundInt(float const x)
-{
-	float const round_nearest = 0.5f;
-	int i;
-	__asm
-	{
-		fld x;
-		fadd st, st(0);
-		fadd round_nearest;
-		fistp i;
-		sar i, 1;
-	}
-	return i;
-}
-
-// fast integer floor
-static inline int FloorInt(float const x)
-{
-	float const round_minus_infinity = -0.5f;
-	int i;
-	__asm
-	{
-		fld x;
-		fadd st, st(0);
-		fadd round_minus_infinity;
-		fistp i;
-		sar i, 1;
-	}
-	return i;
-}
-
-// fast integer ceiling
-static inline int CeilingInt(float const x)
-{
-	float const round_plus_infinity = -0.5f;
-	int i;
-	__asm
-	{
-		fld x;
-		fadd st, st(0);
-		fsubr round_plus_infinity;
-		fistp i;
-		sar i, 1;
-	}
-	return -i;
-}
-
-// fast integer truncate
-static inline int TruncateInt(float const x)
-{
-	float const round_minus_infinity = -0.5f;
-	int i;
-	__asm
-	{
-		fld x;
-		fadd st, st(0);
-		fabs;
-		fadd round_minus_infinity;
-		fistp i;
-		sar i, 1;
-	}
-	return x >= 0 ? i : -i;
-}
-
 
 #if ANTIALIAS == ANTIALIAS_POLYBLEP
 // width of bandlimited step relative to the sample period
@@ -1191,39 +1034,6 @@ float OscillatorPoly4Poly5(OscillatorConfig const &config, OscillatorState &stat
 float OscillatorPoly17Poly5(OscillatorConfig const &config, OscillatorState &state, float step)
 {
 	return OscillatorPoly(config, state, poly17poly5, ARRAY_SIZE(poly17poly5), step);
-}
-
-namespace Random
-{
-	// random seed
-	unsigned int gSeed = 0x92D68CA2;
-
-	// set seed
-	inline void Seed(unsigned int aSeed)
-	{
-		gSeed = aSeed;
-	}
-
-	// random unsigned long
-	inline unsigned int Int()
-	{
-#if 1
-		gSeed ^= (gSeed << 13);
-		gSeed ^= (gSeed >> 17);
-		gSeed ^= (gSeed << 5);
-#else
-		gSeed = 1664525L * gSeed + 1013904223L;
-#endif
-		return gSeed;
-	}
-
-	// random uniform float
-	inline float Float()
-	{
-		union { float f; unsigned u; } floatint;
-		floatint.u = 0x3f800000 | (Int() >> 9);
-		return floatint.f - 1.0f;
-	}
 }
 
 // white noise oscillator
@@ -2689,19 +2499,6 @@ void UpdateLowFrequencyOscillatorDisplay(HANDLE hOut)
 		menu_pos[MENU_LFO].X + 19, menu_pos[MENU_LFO].Y + 4
 	};
 	WriteConsoleOutput(hOut, &buf[0], size, pos, &region);
-}
-
-void Clear(HANDLE hOut)
-{
-	CONSOLE_SCREEN_BUFFER_INFO bufInfo;
-	COORD osc_phase = { 0, 0 };
-	DWORD written;
-	DWORD size;
-	GetConsoleScreenBufferInfo(hOut, &bufInfo);
-	size = bufInfo.dwSize.X * bufInfo.dwSize.Y;
-	FillConsoleOutputCharacter(hOut, (TCHAR)' ', size, osc_phase, &written);
-	FillConsoleOutputAttribute(hOut, FOREGROUND_RED | FOREGROUND_GREEN | FOREGROUND_BLUE, size, osc_phase, &written);
-	SetConsoleCursorPosition(hOut, osc_phase);
 }
 
 void main(int argc, char **argv)
