@@ -1,10 +1,8 @@
 /*
-
 MINI VIRTUAL ANALOG SYNTHESIZER
 Copyright 2014 Kenneth D. Miller III
 
 Random Number Generator
-
 */
 #include "StdAfx.h"
 

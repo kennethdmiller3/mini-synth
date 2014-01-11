@@ -11,3 +11,7 @@
 #include "bass.h"
 
 #define ARRAY_SIZE(x) (sizeof(x)/sizeof(x[0]))
+
+// general configuration
+// TO DO: separate voices from keys
+#define KEYS 24
