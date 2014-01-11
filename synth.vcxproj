@@ -93,21 +93,47 @@
   <ItemGroup>
     <ClCompile Include="Console.cpp" />
     <ClCompile Include="Debug.cpp" />
+    <ClCompile Include="Envelope.cpp" />
+    <ClCompile Include="Filter.cpp" />
     <ClCompile Include="Menu.cpp" />
+    <ClCompile Include="Oscillator.cpp" />
+    <ClCompile Include="OscillatorLFO.cpp" />
+    <ClCompile Include="OscillatorNote.cpp" />
     <ClCompile Include="Random.cpp" />
     <ClCompile Include="StdAfx.cpp">
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Create</PrecompiledHeader>
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">Create</PrecompiledHeader>
     </ClCompile>
+    <ClCompile Include="SubOscillator.cpp" />
     <ClCompile Include="synth.cpp" />
+    <ClCompile Include="Wave.cpp" />
+    <ClCompile Include="WaveNoise.cpp" />
+    <ClCompile Include="WavePoly.cpp" />
+    <ClCompile Include="WavePulse.cpp" />
+    <ClCompile Include="WaveSawtooth.cpp" />
+    <ClCompile Include="WaveSine.cpp" />
+    <ClCompile Include="WaveTriangle.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Console.h" />
     <ClInclude Include="Debug.h" />
+    <ClInclude Include="Envelope.h" />
+    <ClInclude Include="Filter.h" />
     <ClInclude Include="Math.h" />
     <ClInclude Include="Menu.h" />
+    <ClInclude Include="Oscillator.h" />
+    <ClInclude Include="OscillatorLFO.h" />
+    <ClInclude Include="OscillatorNote.h" />
+    <ClInclude Include="PolyBLEP.h" />
     <ClInclude Include="Random.h" />
     <ClInclude Include="StdAfx.h" />
+    <ClInclude Include="SubOscillator.h" />
+    <ClInclude Include="Wave.h" />
+    <ClInclude Include="WaveNoise.h" />
+    <ClInclude Include="WavePoly.h" />
+    <ClInclude Include="WavePulse.h" />
+    <ClInclude Include="WaveSawtooth.h" />
+    <ClInclude Include="WaveSine.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
