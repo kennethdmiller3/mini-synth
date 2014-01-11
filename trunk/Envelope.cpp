@@ -8,6 +8,7 @@ Envelope Generator
 
 #include "Envelope.h"
 #include "Math.h"
+#include "Keys.h"
 
 // envelope bias values to make the exponential decay arrive in finite time
 // the attack part is set up to be more linear (and shorter) than the decay/release part

@@ -52,4 +52,4 @@ extern NoteOscillatorConfig osc_config[NUM_OSCILLATORS];
 // TO DO: oscillator mixer
 
 // note oscillator state
-extern OscillatorState osc_state[KEYS][NUM_OSCILLATORS];
+extern OscillatorState osc_state[][NUM_OSCILLATORS];

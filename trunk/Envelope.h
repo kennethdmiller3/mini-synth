@@ -52,5 +52,5 @@ public:
 extern EnvelopeConfig flt_env_config;
 extern EnvelopeConfig vol_env_config;
 
-extern EnvelopeState flt_env_state[KEYS];
-extern EnvelopeState vol_env_state[KEYS];
+extern EnvelopeState flt_env_state[];
+extern EnvelopeState vol_env_state[];

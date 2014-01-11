@@ -8,6 +8,7 @@ Filter
 
 #include "Filter.h"
 #include "Math.h"
+#include "Keys.h"
 
 // filter configuration
 FilterConfig flt_config(false, FilterConfig::LOWPASS_4, 0.0f, 0.0f, 0.0f, 0.0f);

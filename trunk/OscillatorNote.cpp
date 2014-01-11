@@ -7,6 +7,7 @@ Note Oscillator
 #include "StdAfx.h"
 
 #include "OscillatorNote.h"
+#include "Keys.h"
 
 // note oscillator config
 NoteOscillatorConfig osc_config[NUM_OSCILLATORS];

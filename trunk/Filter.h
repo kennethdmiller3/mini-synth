@@ -120,4 +120,4 @@ public:
 };
 
 // filter state
-extern FilterState flt_state[KEYS];
+extern FilterState flt_state[];
