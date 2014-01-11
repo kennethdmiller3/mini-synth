@@ -93,6 +93,7 @@
   <ItemGroup>
     <ClCompile Include="Console.cpp" />
     <ClCompile Include="Debug.cpp" />
+    <ClCompile Include="Menu.cpp" />
     <ClCompile Include="Random.cpp" />
     <ClCompile Include="StdAfx.cpp">
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Create</PrecompiledHeader>
@@ -104,6 +105,7 @@
     <ClInclude Include="Console.h" />
     <ClInclude Include="Debug.h" />
     <ClInclude Include="Math.h" />
+    <ClInclude Include="Menu.h" />
     <ClInclude Include="Random.h" />
     <ClInclude Include="StdAfx.h" />
   </ItemGroup>
