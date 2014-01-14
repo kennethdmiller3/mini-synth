@@ -63,6 +63,7 @@
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <OptimizeReferences>true</OptimizeReferences>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
+      <GenerateMapFile>true</GenerateMapFile>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
@@ -98,10 +99,16 @@
     <ClCompile Include="DisplayOscillatorFrequency.cpp" />
     <ClCompile Include="DisplayOscillatorWaveform.cpp" />
     <ClCompile Include="DisplaySpectrumAnalyzer.cpp" />
+    <ClCompile Include="Effect.cpp" />
     <ClCompile Include="Envelope.cpp" />
     <ClCompile Include="Filter.cpp" />
     <ClCompile Include="Keys.cpp" />
     <ClCompile Include="Menu.cpp" />
+    <ClCompile Include="MenuFLT.cpp" />
+    <ClCompile Include="MenuFX.cpp" />
+    <ClCompile Include="MenuLFO.cpp" />
+    <ClCompile Include="MenuOSC.cpp" />
+    <ClCompile Include="MenuVOL.cpp" />
     <ClCompile Include="Oscillator.cpp" />
     <ClCompile Include="OscillatorLFO.cpp" />
     <ClCompile Include="OscillatorNote.cpp" />
@@ -128,11 +135,17 @@
     <ClInclude Include="DisplayOscillatorFrequency.h" />
     <ClInclude Include="DisplayOscillatorWaveform.h" />
     <ClInclude Include="DisplaySpectrumAnalyzer.h" />
+    <ClInclude Include="Effect.h" />
     <ClInclude Include="Envelope.h" />
     <ClInclude Include="Filter.h" />
     <ClInclude Include="Keys.h" />
     <ClInclude Include="Math.h" />
     <ClInclude Include="Menu.h" />
+    <ClInclude Include="MenuFLT.h" />
+    <ClInclude Include="MenuFX.h" />
+    <ClInclude Include="MenuLFO.h" />
+    <ClInclude Include="MenuOSC.h" />
+    <ClInclude Include="MenuVOL.h" />
     <ClInclude Include="Oscillator.h" />
     <ClInclude Include="OscillatorLFO.h" />
     <ClInclude Include="OscillatorNote.h" />

@@ -19,11 +19,11 @@ void UpdateOscillatorFrequencyDisplay(HANDLE hOut, int const k, int const o)
 	float const key_freq = keyboard_frequency[k] * keyboard_timescale;
 
 	// get attributes to use
-	MenuMode menu = MenuMode(MENU_OSC1 + o);
-	COORD const pos = { menu_pos[menu].X + 8, menu_pos[menu].Y };
-	bool const menu_selected = (menu_active == menu);
-	bool const title_selected = menu_selected && menu_item[menu] == 0;
-	WORD const title_attrib = menu_title_attrib[true][menu_selected + title_selected];
+	Menu::MenuMode menu = Menu::MenuMode(Menu::MENU_OSC1 + o);
+	COORD const pos = { Menu::pos[menu].X + 8, Menu::pos[menu].Y };
+	bool const selected = (Menu::active == menu);
+	bool const title_selected = selected && Menu::item[menu] == 0;
+	WORD const title_attrib = Menu::title_attrib[true][selected + title_selected];
 	WORD const num_attrib = (title_attrib & 0xF8) | (FOREGROUND_GREEN);
 	WORD const unit_attrib = (title_attrib & 0xF8) | (FOREGROUND_RED | FOREGROUND_GREEN | FOREGROUND_BLUE);
 
