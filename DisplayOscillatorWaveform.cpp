@@ -30,6 +30,32 @@ static CHAR_INFO const plot[2] = {
 static COORD const pos = { 0, 0 };
 static COORD const size = { WAVEFORM_WIDTH, WAVEFORM_HEIGHT };
 
+// plot one step
+static float UpdateWaveformStep(NoteOscillatorConfig config[], OscillatorState state[], float step[], float delta[], float cutoff, FilterState &filter, float step_base)
+{
+	// sum the oscillator outputs
+	float value = 0.0f;
+	for (int o = 0; o < NUM_OSCILLATORS; ++o)
+	{
+		if (!config[o].enable)
+			continue;
+		if (config[o].sync_enable)
+			config[o].sync_phase = config[o].frequency / config[0].frequency;
+		if (config[o].sub_osc_mode)
+			value += config[o].sub_osc_amplitude * SubOscillator(config[o], state[o], 1, delta[o]);
+		value += state[o].Compute(config[o], delta[o]);
+		state[o].Advance(config[o], step[o]);
+	}
+
+	if (flt_config.enable)
+	{
+		// apply filter
+		value = filter.Update(flt_config, cutoff, value, step_base);
+	}
+
+	return value;
+}
+
 // waveform display settings
 void UpdateOscillatorWaveformDisplay(HANDLE hOut, BASS_INFO const &info, int const k)
 {
@@ -131,7 +157,7 @@ void UpdateOscillatorWaveformDisplay(HANDLE hOut, BASS_INFO const &info, int con
 	{
 		// get steps needed to advance OSC1 by the time step
 		// (subtracting the steps that the plot itself will take)
-		int steps = FloorInt(key_freq * osc_config[0].frequency * deltaTime / 1000 - 1) * WAVEFORM_WIDTH;
+		int steps = FloorInt(key_freq * config[0].frequency * deltaTime / 1000 - 1) * WAVEFORM_WIDTH;
 		if (steps > 0)
 		{
 			// "rewind" oscillators so they'll end at zero phase
@@ -146,25 +172,7 @@ void UpdateOscillatorWaveformDisplay(HANDLE hOut, BASS_INFO const &info, int con
 			for (int x = 0; x < steps; ++x)
 			{
 				// sum the oscillator outputs
-				float value = 0.0f;
-				for (int o = 0; o < NUM_OSCILLATORS; ++o)
-				{
-					if (!config[o].enable)
-						continue;
-
-					if (config[o].sync_enable)
-						config[o].sync_phase = config[o].frequency / config[0].frequency;
-					if (config[o].sub_osc_mode)
-						value += config[o].sub_osc_amplitude * SubOscillator(config[o], state[o], 1, delta[o]);
-					value += state[o].Compute(config[o], delta[o]);
-					state[o].Advance(config[o], step[o]);
-				}
-
-				// apply filter
-				value = filter.Update(flt_config, cutoff, value, step_base);
-
-				// apply volume envelope
-				value *= vol_env_amplitude;
+				UpdateWaveformStep(config, state, step, delta, cutoff, filter, step_base);
 			}
 		}
 	}
@@ -187,27 +195,7 @@ void UpdateOscillatorWaveformDisplay(HANDLE hOut, BASS_INFO const &info, int con
 	for (int x = 0; x < WAVEFORM_WIDTH; ++x)
 	{
 		// sum the oscillator outputs
-		float value = 0.0f;
-		for (int o = 0; o < NUM_OSCILLATORS; ++o)
-		{
-			if (!config[o].enable)
-				continue;
-			if (config[o].sync_enable)
-				config[o].sync_phase = config[o].frequency / config[0].frequency;
-			if (config[o].sub_osc_mode)
-				value += config[o].sub_osc_amplitude * SubOscillator(config[o], state[o], 1, delta[o]);
-			value += state[o].Compute(config[o], delta[o]);
-			state[o].Advance(config[o], step[o]);
-		}
-
-		if (flt_config.enable)
-		{
-			// apply filter
-			value = filter.Update(flt_config, cutoff, value, step_base);
-		}
-
-		// apply volume envelope
-		value *= vol_env_amplitude;
+		float const value = vol_env_amplitude * UpdateWaveformStep(config, state, step, delta, cutoff, filter, step_base);
 
 		// plot waveform column
 		int grid_y = FloorInt(-(WAVEFORM_HEIGHT - 0.5f) * value);
