@@ -63,7 +63,7 @@ public:
 };
 
 // filter mode names
-extern const char const * const filter_name[FilterConfig::COUNT];
+extern char const * const filter_name[FilterConfig::COUNT];
 
 // filter configuration
 extern FilterConfig flt_config;
