@@ -15,6 +15,8 @@ Poly-Noise Wave
 // precomputed linear feedback shift register output
 char poly4[(1 << 4) - 1];
 char poly5[(1 << 5) - 1];
+char period93[93];
+char poly9[(1 << 9) - 1];
 char poly17[(1 << 17) - 1];
 
 // precomputed wave tables for poly5-clocked waveforms
@@ -93,6 +95,8 @@ void InitPoly()
 {
 	InitPoly(poly4, 4, 1, 0xF, 0);
 	InitPoly(poly5, 5, 2, 0x1F, 1);
+	InitPoly(period93, 15, 6, 0x7FFF, 0);
+	InitPoly(poly9, 9, 4, 0x1FF, 0);
 	InitPoly(poly17, 17, 5, 0x1FFFF, 0);
 	InitPulsePoly5();
 	InitPoly4Poly5();
@@ -150,6 +154,20 @@ float OscillatorPoly4(OscillatorConfig const &config, OscillatorState &state, fl
 float OscillatorPoly5(OscillatorConfig const &config, OscillatorState &state, float step)
 {
 	return OscillatorPoly(config, state, poly5, ARRAY_SIZE(poly5), step);
+}
+
+// period93 oscillator
+// 15-bit linear feedback shift register noise with variant tap position
+float OscillatorPeriod93(OscillatorConfig const &config, OscillatorState &state, float step)
+{
+	return OscillatorPoly(config, state, period93, ARRAY_SIZE(period93), step);
+}
+
+// poly9 oscillator
+// 9-bit linear feedback shift register noise
+float OscillatorPoly9(OscillatorConfig const &config, OscillatorState &state, float step)
+{
+	return OscillatorPoly(config, state, poly9, ARRAY_SIZE(poly9), step);
 }
 
 // poly17 oscillator
