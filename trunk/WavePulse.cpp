@@ -39,7 +39,7 @@ float OscillatorPulse(OscillatorConfig const &config, OscillatorState &state, fl
 		float const up_nearest = float(RoundInt(state.phase));
 
 		// nearest down edge
-		float const down_nearest = float(RoundInt(state.phase - config.waveparam) + 1) - config.waveparam;
+		float const down_nearest = float(RoundInt(state.phase - config.waveparam)) + config.waveparam;
 
 		if (config.sync_enable)
 		{
