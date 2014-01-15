@@ -12,6 +12,8 @@ class OscillatorState;
 // precomputed linear feedback shift register output
 extern char poly4[(1 << 4) - 1];
 extern char poly5[(1 << 5) - 1];
+extern char period93[93];
+extern char poly9[(1 << 9) - 1];
 extern char poly17[(1 << 17) - 1];
 
 // precomputed wave tables for poly5-clocked waveforms
@@ -29,6 +31,14 @@ extern float OscillatorPoly4(OscillatorConfig const &config, OscillatorState &st
 // poly5 waveform
 // 5-bit linear feedback shift register noise
 extern float OscillatorPoly5(OscillatorConfig const &config, OscillatorState &state, float step);
+
+// period-93 waveform
+// 15-bit linear feedback shift register noise with variant tap position
+extern float OscillatorPeriod93(OscillatorConfig const &config, OscillatorState &state, float step);
+
+// poly9 waveform
+// 9-bit linear feedback shift register noise
+extern float OscillatorPoly9(OscillatorConfig const &config, OscillatorState &state, float step);
 
 // poly17 waveform
 // 17-bit linear feedback shift register noise
