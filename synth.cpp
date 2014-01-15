@@ -357,22 +357,14 @@ void main(int argc, char **argv)
 					}
 					else if (code >= VK_F1 && code < VK_F1 + Menu::MENU_COUNT - (info.dsver < 8))
 					{
-						Menu::MenuMode prev_active = Menu::active;
-						Menu::active = Menu::MENU_COUNT;
-						Menu::Handler(hOut, 0, 0, prev_active);
-						Menu::active = Menu::MenuMode(code - VK_F1);
-						Menu::Handler(hOut, 0, 0, Menu::active);
+						Menu::SetActive(hOut, Menu::MenuMode(code - VK_F1));
 					}
 					else if (code == VK_TAB)
 					{
-						Menu::MenuMode prev_active = Menu::active;
-						Menu::active = Menu::MENU_COUNT;
-						Menu::Handler(hOut, 0, 0, prev_active);
 						if (modifiers & SHIFT_PRESSED)
-							Menu::active = Menu::MenuMode(prev_active == 0 ? Menu::MENU_COUNT - 1 : prev_active - 1);
+							Menu::SetActive(hOut, Menu::active > 0 ? Menu::MenuMode(Menu::active - 1) : Menu::MenuMode(Menu::MENU_COUNT - (info.dsver < 8) - 1));
 						else
-							Menu::active = Menu::MenuMode(prev_active == Menu::MENU_COUNT - 1 ? 0 : prev_active + 1);
-						Menu::Handler(hOut, 0, 0, Menu::active);
+							Menu::SetActive(hOut, Menu::active < Menu::MENU_COUNT - (info.dsver < 8) - 1 ? Menu::MenuMode(Menu::active + 1) : Menu::MenuMode(0));
 					}
 					else if (code == VK_UP || code == VK_DOWN || code == VK_RIGHT || code == VK_LEFT)
 					{

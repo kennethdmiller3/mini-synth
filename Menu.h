@@ -37,6 +37,9 @@ namespace Menu
 	// position of each menu
 	extern COORD const pos[MENU_COUNT];
 
+	// set the active menu
+	extern void SetActive(HANDLE hOut, MenuMode menu);
+
 	// update a logarthmic-frequency property
 	extern void UpdateFrequencyProperty(float &property, int const sign, DWORD const modifiers, float const minimum, float const maximum);
 
@@ -50,5 +53,5 @@ namespace Menu
 	extern void PrintMenuTitle(MenuMode menu, HANDLE hOut, COORD pos, bool enable, DWORD flags, char const *on_text, char const *off_text);
 
 	// general menu handler
-	void Handler(HANDLE hOut, WORD key, DWORD modifiers, MenuMode menu);
+	extern void Handler(HANDLE hOut, WORD key, DWORD modifiers, MenuMode menu);
 }

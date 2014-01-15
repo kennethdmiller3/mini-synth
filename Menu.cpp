@@ -66,6 +66,15 @@ namespace Menu
 		FOREGROUND_RED | FOREGROUND_GREEN | FOREGROUND_INTENSITY | BACKGROUND_BLUE,
 	};
 
+	// set the active menu
+	void SetActive(HANDLE hOut, MenuMode menu)
+	{
+		MenuMode prev_active = active;
+		active = MENU_COUNT;
+		Handler(hOut, 0, 0, prev_active);
+		active = menu;
+		Handler(hOut, 0, 0, active);
+	}
 
 	// update a logarthmic-frequency property
 	void UpdateFrequencyProperty(float &property, int const sign, DWORD const modifiers, float const minimum, float const maximum)
