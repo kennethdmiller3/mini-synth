@@ -120,6 +120,7 @@
     </ClCompile>
     <ClCompile Include="SubOscillator.cpp" />
     <ClCompile Include="synth.cpp" />
+    <ClCompile Include="Voice.cpp" />
     <ClCompile Include="Wave.cpp" />
     <ClCompile Include="WaveNoise.cpp" />
     <ClCompile Include="WavePoly.cpp" />
@@ -155,6 +156,7 @@
     <ClInclude Include="Random.h" />
     <ClInclude Include="StdAfx.h" />
     <ClInclude Include="SubOscillator.h" />
+    <ClInclude Include="Voice.h" />
     <ClInclude Include="Wave.h" />
     <ClInclude Include="WaveNoise.h" />
     <ClInclude Include="WavePoly.h" />
