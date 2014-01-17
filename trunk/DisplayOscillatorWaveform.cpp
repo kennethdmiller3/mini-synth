@@ -14,7 +14,7 @@ Oscillator Waveform Display
 #include "Filter.h"
 #include "Envelope.h"
 #include "Wave.h"
-#include "Keys.h"
+#include "Voice.h"
 
 #define WAVEFORM_WIDTH 80
 #define WAVEFORM_HEIGHT 20
@@ -57,10 +57,10 @@ static float UpdateWaveformStep(NoteOscillatorConfig config[], OscillatorState s
 }
 
 // waveform display settings
-void UpdateOscillatorWaveformDisplay(HANDLE hOut, BASS_INFO const &info, int const k)
+void UpdateOscillatorWaveformDisplay(HANDLE hOut, BASS_INFO const &info, int const v)
 {
 	// display region
-	SMALL_RECT region = { 0, 50 - WAVEFORM_HEIGHT, WAVEFORM_WIDTH - 1, 49 };
+	SMALL_RECT region = { 0, 49 - WAVEFORM_HEIGHT, WAVEFORM_WIDTH - 1, 48 };
 
 	// waveform buffer
 	CHAR_INFO buf[WAVEFORM_HEIGHT][WAVEFORM_WIDTH] = { 0 };
@@ -89,13 +89,13 @@ void UpdateOscillatorWaveformDisplay(HANDLE hOut, BASS_INFO const &info, int con
 	float const step_base = cycle / float(WAVEFORM_WIDTH);
 
 	// key frequency
-	float const key_freq = keyboard_frequency[k] * keyboard_timescale;
+	float const key_freq = note_frequency[voice_note[v]];
 
 	// update filter envelope generator
-	float const flt_env_amplitude = flt_env_state[k].amplitude;
+	float const flt_env_amplitude = flt_env_state[v].amplitude;
 
 	// update volume envelope generator
-	float const vol_env_amplitude = vol_env_config.enable ? vol_env_state[k].amplitude : 1;
+	float const vol_env_amplitude = vol_env_config.enable ? vol_env_state[v].amplitude : 1;
 
 	// base phase delta
 	float const delta_base = key_freq / info.freq;
@@ -129,7 +129,7 @@ void UpdateOscillatorWaveformDisplay(HANDLE hOut, BASS_INFO const &info, int con
 
 	// detect when to reset the filter
 	static bool prev_active;
-	static int prev_k;
+	static int prev_v;
 
 	// compute cutoff frequency
 	// (assume key follow)
@@ -141,15 +141,15 @@ void UpdateOscillatorWaveformDisplay(HANDLE hOut, BASS_INFO const &info, int con
 	prevTime += deltaTime;
 
 	// reset filter state on playing a note
-	if (prev_k != k)
+	if (prev_v != v)
 	{
 		filter.Reset();
-		prev_k = k;
+		prev_v = v;
 	}
-	if (prev_active != (vol_env_state[k].state != EnvelopeState::OFF))
+	if (prev_active != (vol_env_state[v].state != EnvelopeState::OFF))
 	{
 		filter.Reset();
-		prev_active = (vol_env_state[k].state != EnvelopeState::OFF);
+		prev_active = (vol_env_state[v].state != EnvelopeState::OFF);
 	}
 
 	// if the filter is enabled...

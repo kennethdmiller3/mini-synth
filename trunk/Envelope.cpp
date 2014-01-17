@@ -8,7 +8,7 @@ Envelope Generator
 
 #include "Envelope.h"
 #include "Math.h"
-#include "Keys.h"
+#include "Voice.h"
 
 // envelope bias values to make the exponential decay arrive in finite time
 // the attack part is set up to be more linear (and shorter) than the decay/release part
@@ -22,8 +22,8 @@ EnvelopeConfig flt_env_config(false, 0.0f, 1.0f, 0.0f, 0.1f);
 EnvelopeConfig vol_env_config(false, 0.0f, 1.0f, 1.0f, 0.1f);
 
 // envelope state
-EnvelopeState flt_env_state[KEYS];
-EnvelopeState vol_env_state[KEYS];
+EnvelopeState flt_env_state[VOICES];
+EnvelopeState vol_env_state[VOICES];
 
 // envelope config constructor
 EnvelopeConfig::EnvelopeConfig(bool const enable, float const attack_time, float const decay_time, float const sustain_level, float const release_time)

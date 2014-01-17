@@ -2,6 +2,7 @@
 
 #include "Debug.h"
 #include "Midi.h"
+#include "Voice.h"
 
 // midi messages
 // http://www.midi.org/techspecs/midimessages.php
@@ -57,9 +58,11 @@ namespace Midi
 			{
 			case MIDI_NOTE_OFF:
 				DebugPrint("Note Off:       note=%d velocity=%d\n", data1, data2);
+				NoteOff(data1, data2);
 				break;
 			case MIDI_NOTE_ON:
 				DebugPrint("Note On:        note=%d velocity=%d\n", data1, data2);
+				NoteOn(data1, data2);
 				break;
 			case MIDI_KEY_PRESSURE:
 				DebugPrint("Key Pressure:   note=%d pressure=%d\n", data1, data2);
@@ -81,6 +84,8 @@ namespace Midi
 					break;
 				case MIDI_ALL_NOTES_OFF:
 					DebugPrint("All Notes Off\n");
+					for (int v = 0; v < VOICES; ++v)
+						NoteOff(voice_note[v], 0);
 					break;
 				case MIDI_OMNI_MODE_OFF:
 					DebugPrint("Omni Mode Off\n");

@@ -20,7 +20,7 @@ void OscillatorState::Reset()
 // start oscillator
 void OscillatorState::Start()
 {
-	Reset();
+//	Reset();
 }
 
 // update oscillator

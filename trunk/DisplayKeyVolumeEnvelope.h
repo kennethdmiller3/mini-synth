@@ -9,4 +9,4 @@ Per-Key Volume Envelope Display
 #include "Envelope.h"
 
 void InitKeyVolumeEnvelopeDisplay(HANDLE hOut);
-void UpdateKeyVolumeEnvelopeDisplay(HANDLE hOut, EnvelopeState::State vol_env_display[]);
+void UpdateKeyVolumeEnvelopeDisplay(HANDLE hOut);

@@ -7,7 +7,7 @@ Note Oscillator
 #include "StdAfx.h"
 
 #include "OscillatorNote.h"
-#include "Keys.h"
+#include "Voice.h"
 
 // note oscillator config
 NoteOscillatorConfig osc_config[NUM_OSCILLATORS];
@@ -15,7 +15,7 @@ NoteOscillatorConfig osc_config[NUM_OSCILLATORS];
 // TO DO: oscillator mixer
 
 // note oscillator state
-OscillatorState osc_state[KEYS][NUM_OSCILLATORS];
+OscillatorState osc_state[VOICES][NUM_OSCILLATORS];
 
 // modulate note oscillator
 void NoteOscillatorConfig::Modulate(float lfo)

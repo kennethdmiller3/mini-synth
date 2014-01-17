@@ -9,7 +9,7 @@ Note Oscillator Menu
 #include "MenuOsc.h"
 #include "Console.h"
 #include "OscillatorNote.h"
-#include "Keys.h"
+#include "Voice.h"
 
 namespace Menu
 {
@@ -26,7 +26,7 @@ namespace Menu
 				break;
 			case OSC_WAVETYPE:
 				config.wavetype = Wave((config.wavetype + WAVE_COUNT + sign) % WAVE_COUNT);
-				for (int k = 0; k < KEYS; ++k)
+				for (int k = 0; k < VOICES; ++k)
 					osc_state[k][menu - MENU_OSC1].Reset();
 				break;
 			case OSC_WAVEPARAM_BASE:
