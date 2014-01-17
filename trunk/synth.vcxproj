@@ -109,6 +109,7 @@
     <ClCompile Include="MenuLFO.cpp" />
     <ClCompile Include="MenuOSC.cpp" />
     <ClCompile Include="MenuVOL.cpp" />
+    <ClCompile Include="Midi.cpp" />
     <ClCompile Include="Oscillator.cpp" />
     <ClCompile Include="OscillatorLFO.cpp" />
     <ClCompile Include="OscillatorNote.cpp" />
@@ -146,6 +147,7 @@
     <ClInclude Include="MenuLFO.h" />
     <ClInclude Include="MenuOSC.h" />
     <ClInclude Include="MenuVOL.h" />
+    <ClInclude Include="Midi.h" />
     <ClInclude Include="Oscillator.h" />
     <ClInclude Include="OscillatorLFO.h" />
     <ClInclude Include="OscillatorNote.h" />

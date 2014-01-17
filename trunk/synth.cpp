@@ -10,6 +10,7 @@ Copyright 2014 Kenneth D. Miller III
 #include "Random.h"
 #include "Menu.h"
 #include "Keys.h"
+#include "Midi.h"
 
 #include "PolyBLEP.h"
 #include "Oscillator.h"
@@ -194,6 +195,7 @@ void PrintAntialias(HANDLE hOut)
 		PrintConsoleWithAttribute(hOut, { pos.X + 15, pos.Y }, FOREGROUND_RED,   "OFF");
 }
 
+
 void main(int argc, char **argv)
 {
 	HANDLE hIn = GetStdHandle(STD_INPUT_HANDLE);
@@ -300,6 +302,29 @@ void main(int argc, char **argv)
 
 	// previous volume envelope state for each key
 	EnvelopeState::State vol_env_display[KEYS] = { EnvelopeState::OFF };
+
+	// get the number of midi devices
+	UINT midiInDevs = Midi::Input::GetNumDevices();
+	DebugPrint("MIDI input devices: %d\n", midiInDevs);
+
+	// print device names
+	for (UINT i = 0; i < midiInDevs; ++i)
+	{
+		MIDIINCAPS midiInCaps;
+		if (Midi::Input::GetDeviceCaps(i, midiInCaps) == 0)
+		{
+			DebugPrint("%d: %s\n", i, midiInCaps.szPname);
+		}
+	}
+
+	// if there are any devices available...
+	if (midiInDevs > 0)
+	{
+		// open and start midi input
+		// TO DO: select device number via a configuration setting
+		Midi::Input::Open(0);
+		Midi::Input::Start();
+	}
 
 	while (running)
 	{
@@ -435,6 +460,13 @@ void main(int argc, char **argv)
 
 		// sleep for 1/60th of second
 		Sleep(16);
+	}
+
+	if (midiInDevs)
+	{
+		// stop and close midi input
+		Midi::Input::Stop();
+		Midi::Input::Close();
 	}
 
 	// clear the window
