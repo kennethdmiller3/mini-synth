@@ -16,12 +16,8 @@ WORD const keys[KEYS] =
 	'Q', '2', 'W', '3', 'E', 'R', '5', 'T', '6', 'Y', '7', 'U',
 };
 
-// keyboard base frequencies
-float keyboard_frequency[KEYS];
+// note keys held
+bool key_down[KEYS];
 
 // keyboard octave
 int keyboard_octave = 4;
-float keyboard_timescale = 1.0f;
-
-// most recent note key pressed
-int keyboard_most_recent = 0;

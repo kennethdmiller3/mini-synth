@@ -10,6 +10,7 @@ Copyright 2014 Kenneth D. Miller III
 #include "Random.h"
 #include "Menu.h"
 #include "Keys.h"
+#include "Voice.h"
 #include "Midi.h"
 
 #include "PolyBLEP.h"
@@ -48,14 +49,14 @@ float output_scale = 0.25f;	// 0.25f;
 
 DWORD CALLBACK WriteStream(HSTREAM handle, short *buffer, DWORD length, void *user)
 {
-	// get active oscillators
-	int index[KEYS];
+	// get active voices
+	int index[VOICES];
 	int active = 0;
-	for (int k = 0; k < ARRAY_SIZE(keys); k++)
+	for (int v = 0; v < VOICES; v++)
 	{
-		if (vol_env_state[k].state != EnvelopeState::OFF)
+		if (vol_env_state[v].state != EnvelopeState::OFF)
 		{
-			index[active++] = k;
+			index[active++] = v;
 		}
 	}
 
@@ -100,19 +101,20 @@ DWORD CALLBACK WriteStream(HSTREAM handle, short *buffer, DWORD length, void *us
 		// for each active oscillator...
 		for (int i = 0; i < active; ++i)
 		{
-			int k = index[i];
+			// get the voice index
+			int v = index[i];
 
 			// key frequency (taking octave shift into account)
-			float const key_freq = keyboard_frequency[k] * keyboard_timescale;
+			float const key_freq = note_frequency[voice_note[v]];
 
 			// update filter envelope generator
-			float const flt_env_amplitude = flt_env_state[k].Update(flt_env_config, step);
+			float const flt_env_amplitude = flt_env_state[v].Update(flt_env_config, step);
 
 			// update volume envelope generator
-			float const vol_env_amplitude = vol_env_state[k].Update(vol_env_config, step);
+			float const vol_env_amplitude = vol_env_state[v].Update(vol_env_config, step);
 
 			// if the envelope generator finished...
-			if (vol_env_state[k].state == EnvelopeState::OFF)
+			if (vol_env_state[v].state == EnvelopeState::OFF)
 			{
 				// remove from active oscillators
 				--active;
@@ -134,8 +136,8 @@ DWORD CALLBACK WriteStream(HSTREAM handle, short *buffer, DWORD length, void *us
 			for (int o = 0; o < NUM_OSCILLATORS; ++o)
 			{
 				if (osc_config[o].sub_osc_mode)
-					osc_value += osc_config[o].sub_osc_amplitude * SubOscillator(osc_config[o], osc_state[k][o], key_freq, step);
-				osc_value += osc_state[k][o].Update(osc_config[o], key_freq, step);
+					osc_value += osc_config[o].sub_osc_amplitude * SubOscillator(osc_config[o], osc_state[v][o], key_freq, step);
+				osc_value += osc_state[v][o].Update(osc_config[o], key_freq, step);
 			}
 
 			// update filter
@@ -147,7 +149,7 @@ DWORD CALLBACK WriteStream(HSTREAM handle, short *buffer, DWORD length, void *us
 				float const cutoff = key_freq * powf(2, flt_config.cutoff_base + flt_config.cutoff_lfo * lfo + flt_config.cutoff_env * flt_env_amplitude);
 
 				// get filtered oscillator value
-				flt_value = flt_state[k].Update(flt_config, cutoff, osc_value, step);
+				flt_value = flt_state[v].Update(flt_config, cutoff, osc_value, step);
 			}
 			else
 			{
@@ -275,11 +277,11 @@ void main(int argc, char **argv)
 	// initialize polynomial noise tables
 	InitPoly();
 
-	// compute frequency for each note key
-	for (int k = 0; k < KEYS; ++k)
+	// compute frequency for each note
+	for (int n = 0; n < NOTES; ++n)
 	{
-		keyboard_frequency[k] = powf(2.0F, (k + 3) / 12.0f) * 220.0f;	// middle C = 261.626Hz; A above middle C = 440Hz
-		//keyboard_frequency[k] = powF(2.0F, k / 12.0f) * 256.0f;		// middle C = 256Hz
+		note_frequency[n] = powf(2.0F, (n - 69) / 12.0f) * 440.0f;		// middle C = 261.626Hz; A above middle C = 440Hz
+		//note_frequency[n] = powF(2.0F, (n - 60) / 12.0f) * 256.0f;	// middle C = 256Hz
 	}
 
 	// initialize key display
@@ -299,9 +301,6 @@ void main(int argc, char **argv)
 
 	// start playing the audio stream
 	BASS_ChannelPlay(stream, FALSE);
-
-	// previous volume envelope state for each key
-	EnvelopeState::State vol_env_display[KEYS] = { EnvelopeState::OFF };
 
 	// get the number of midi devices
 	UINT midiInDevs = Midi::Input::GetNumDevices();
@@ -361,8 +360,17 @@ void main(int argc, char **argv)
 					{
 						if (keyboard_octave > 0)
 						{
+							for (int k = 0; k < KEYS; ++k)
+							{
+								if (key_down[k])
+									NoteOff(k + keyboard_octave * 12 + 12);
+							}
 							--keyboard_octave;
-							keyboard_timescale *= 0.5f;
+							for (int k = 0; k < KEYS; ++k)
+							{
+								if (key_down[k])
+									NoteOn(k + keyboard_octave * 12 + 12);
+							}
 							PrintKeyOctave(hOut);
 						}
 					}
@@ -370,8 +378,17 @@ void main(int argc, char **argv)
 					{
 						if (keyboard_octave < 8)
 						{
+							for (int k = 0; k < KEYS; ++k)
+							{
+								if (key_down[k])
+									NoteOff(k + keyboard_octave * 12 + 12);
+							}
 							++keyboard_octave;
-							keyboard_timescale *= 2.0f;
+							for (int k = 0; k < KEYS; ++k)
+							{
+								if (key_down[k])
+									NoteOn(k + keyboard_octave * 12 + 12);
+							}
 							PrintKeyOctave(hOut);
 						}
 					}
@@ -402,33 +419,27 @@ void main(int argc, char **argv)
 				{
 					if (keyin.Event.KeyEvent.wVirtualKeyCode == keys[k])
 					{
-						// gate filters based on key down
-						bool gate = (keyin.Event.KeyEvent.bKeyDown != 0);
+						// key down
+						bool down = (keyin.Event.KeyEvent.bKeyDown != 0);
 
-						// gate the filter envelope
-						flt_env_state[k].Gate(flt_env_config, gate);
-
-						// if pressing the key
-						if (gate)
+						// if key down state changed...
+						if (key_down[k] != down)
 						{
-							// save the note key
-							keyboard_most_recent = k;
+							// update state
+							key_down[k] = down;
 
-							// if the volume envelope is currently off...
-							if (vol_env_state[k].state == EnvelopeState::OFF)
+							// if pressing the key
+							if (down)
 							{
-								// start the oscillator
-								// (assume restart on key)
-								for (int o = 0; o < NUM_OSCILLATORS; ++o)
-									osc_state[k][o].Start();
-
-								// start the filter
-								flt_state[k].Reset();
+								// note on
+								NoteOn(k + keyboard_octave * 12 + 12);
+							}
+							else
+							{
+								// note off
+								NoteOff(k + keyboard_octave * 12 + 12);
 							}
 						}
-
-						// gate the volume envelope
-						vol_env_state[k].Gate(vol_env_config, gate);
 						break;
 					}
 				}
@@ -437,26 +448,29 @@ void main(int argc, char **argv)
 
 		// center frequency of the zeroth semitone band
 		// (one octave down from the lowest key)
-		float const freq_min = keyboard_frequency[0] * keyboard_timescale * 0.5f;
+		float const freq_min = note_frequency[keyboard_octave * 12];
 
 		// update the spectrum analyzer display
 		UpdateSpectrumAnalyzer(hOut, stream, info, freq_min);
 
 		// update note key volume envelope display
-		UpdateKeyVolumeEnvelopeDisplay(hOut, vol_env_display);
+		UpdateKeyVolumeEnvelopeDisplay(hOut);
 
 		// update the oscillator waveform display
-		UpdateOscillatorWaveformDisplay(hOut, info, keyboard_most_recent);
+		UpdateOscillatorWaveformDisplay(hOut, info, voice_most_recent);
 
 		// update the oscillator frequency displays
 		for (int o = 0; o < 2; ++o)
 		{
 			if (osc_config[o].enable)
-				UpdateOscillatorFrequencyDisplay(hOut, keyboard_most_recent, o);
+				UpdateOscillatorFrequencyDisplay(hOut, voice_most_recent, o);
 		}
 
 		// update the low-frequency oscillator dispaly
 		UpdateLowFrequencyOscillatorDisplay(hOut);
+
+		// show CPU usage
+		PrintConsole(hOut, { 73, 49 }, "%6.2f%%", BASS_GetCPU());
 
 		// sleep for 1/60th of second
 		Sleep(16);

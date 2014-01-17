@@ -8,15 +8,15 @@ Oscillator Frequency Display
 
 #include "DisplayOscillatorFrequency.h"
 #include "Menu.h"
-#include "Keys.h"
+#include "Voice.h"
 #include "Console.h"
 #include "OscillatorNote.h"
 
 // show oscillator frequency
-void UpdateOscillatorFrequencyDisplay(HANDLE hOut, int const k, int const o)
+void UpdateOscillatorFrequencyDisplay(HANDLE hOut, int const v, int const o)
 {
 	// key frequency (taking octave shift into account)
-	float const key_freq = keyboard_frequency[k] * keyboard_timescale;
+	float const key_freq = note_frequency[voice_note[v]];
 
 	// get attributes to use
 	Menu::MenuMode menu = Menu::MenuMode(Menu::MENU_OSC1 + o);

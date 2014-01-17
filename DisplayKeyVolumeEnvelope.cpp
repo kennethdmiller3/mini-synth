@@ -8,10 +8,13 @@ Per-Key Volume Envelope Display
 
 #include "DisplayKeyVolumeEnvelope.h"
 #include "DisplaySpectrumAnalyzer.h"
+#include "Math.h"
 #include "Console.h"
 #include "Keys.h"
+#include "Voice.h"
 
 static COORD const key_pos = { 12, SPECTRUM_HEIGHT };
+static COORD const voice_pos = { 73 - VOICES, 49 };
 
 // attribute associated with each envelope state
 static WORD const env_attrib[EnvelopeState::COUNT] =
@@ -29,17 +32,31 @@ void InitKeyVolumeEnvelopeDisplay(HANDLE hOut)
 	DWORD written;
 	WriteConsoleOutputCharacterW(hOut, LPCWSTR(keys), KEYS, key_pos, &written);
 	FillConsoleOutputAttribute(hOut, env_attrib[EnvelopeState::OFF], KEYS, key_pos, &written);
+
+	// voice indicators
+	CHAR voice[VOICES];
+	memset(voice, 7, VOICES);
+	WriteConsoleOutputCharacter(hOut, voice, VOICES, voice_pos, &written);
 }
 
-void UpdateKeyVolumeEnvelopeDisplay(HANDLE hOut, EnvelopeState::State vol_env_display[])
+
+void UpdateKeyVolumeEnvelopeDisplay(HANDLE hOut)
 {
-	for (int k = 0; k < KEYS; k++)
+	WORD note_env_attrib[NOTES];
+	memset(note_env_attrib, env_attrib[0], sizeof(note_env_attrib));
+	WORD voice_env_attrib[VOICES];
+	memset(voice_env_attrib, env_attrib[0], sizeof(voice_env_attrib));
+	for (int v = 0; v < VOICES; ++v)
 	{
-		if (vol_env_display[k] != vol_env_state[k].state)
-		{
-			vol_env_display[k] = vol_env_state[k].state;
-			DWORD written;
-			FillConsoleOutputAttribute(hOut, env_attrib[vol_env_display[k]], 1, { key_pos.X + SHORT(k), key_pos.Y }, &written);
-		}
+		EnvelopeState::State state = vol_env_state[v].state;
+		if (state != EnvelopeState::OFF)
+			note_env_attrib[voice_note[v]] = voice_env_attrib[v] = env_attrib[state];
 	}
+
+	DWORD written;
+	int x = key_pos.X - keyboard_octave * 12 - 12;
+	int x0 = Max(x, 0);
+	int x1 = Min(x + NOTES, 80);
+	WriteConsoleOutputAttribute(hOut, note_env_attrib - x, x1 - x0, { 0, key_pos.Y }, &written);
+	WriteConsoleOutputAttribute(hOut, voice_env_attrib, VOICES, voice_pos, &written);
 }

@@ -8,7 +8,7 @@ Filter
 
 #include "Filter.h"
 #include "Math.h"
-#include "Keys.h"
+#include "Voice.h"
 
 // filter configuration
 FilterConfig flt_config(false, FilterConfig::LOWPASS_4, 0.0f, 0.0f, 0.0f, 0.0f);
@@ -95,7 +95,7 @@ static float const filter_mix[FilterConfig::COUNT][5] =
 };
 
 // filter state
-FilterState flt_state[KEYS];
+FilterState flt_state[VOICES];
 
 // reset filter state
 void FilterState::Reset()

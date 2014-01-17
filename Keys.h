@@ -13,12 +13,8 @@ Key-Related Values
 // note key bindings
 extern WORD const keys[KEYS];
 
-// keyboard base frequencies
-extern float keyboard_frequency[KEYS];
+// note keys held
+extern bool key_down[KEYS];
 
-// keyboard octave
+// keyboard octave shift
 extern int keyboard_octave;
-extern float keyboard_timescale;
-
-// most recent note key pressed
-extern int keyboard_most_recent;
