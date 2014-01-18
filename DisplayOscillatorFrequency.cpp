@@ -9,14 +9,15 @@ Oscillator Frequency Display
 #include "DisplayOscillatorFrequency.h"
 #include "Menu.h"
 #include "Voice.h"
+#include "Control.h"
 #include "Console.h"
 #include "OscillatorNote.h"
 
 // show oscillator frequency
 void UpdateOscillatorFrequencyDisplay(HANDLE hOut, int const v, int const o)
 {
-	// key frequency (taking octave shift into account)
-	float const key_freq = note_frequency[voice_note[v]];
+	// key frequency (taking pitch wheel control into account)
+	float const key_freq = Control::pitch_scale * note_frequency[voice_note[v]];
 
 	// get attributes to use
 	Menu::MenuMode menu = Menu::MenuMode(Menu::MENU_OSC1 + o);

@@ -15,6 +15,7 @@ Oscillator Waveform Display
 #include "Envelope.h"
 #include "Wave.h"
 #include "Voice.h"
+#include "Control.h"
 
 #define WAVEFORM_WIDTH 80
 #define WAVEFORM_HEIGHT 20
@@ -89,7 +90,7 @@ void UpdateOscillatorWaveformDisplay(HANDLE hOut, BASS_INFO const &info, int con
 	float const step_base = cycle / float(WAVEFORM_WIDTH);
 
 	// key frequency
-	float const key_freq = note_frequency[voice_note[v]];
+	float const key_freq = Control::pitch_scale * note_frequency[voice_note[v]];
 
 	// update filter envelope generator
 	float const flt_env_amplitude = flt_env_state[v].amplitude;

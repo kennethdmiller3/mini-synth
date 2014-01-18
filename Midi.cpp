@@ -1,8 +1,15 @@
+/*
+MINI VIRTUAL ANALOG SYNTHESIZER
+Copyright 2014 Kenneth D. Miller III
+
+MIDI Support
+*/
 #include "StdAfx.h"
 
 #include "Debug.h"
 #include "Midi.h"
 #include "Voice.h"
+#include "Control.h"
 
 // midi messages
 // http://www.midi.org/techspecs/midimessages.php
@@ -78,6 +85,7 @@ namespace Midi
 					break;
 				case MIDI_RESET_ALL_CONTROLLERS:
 					DebugPrint("Reset All Controllers\n");
+					Control::ResetAll();
 					break;
 				case MIDI_LOCAL_CONTROL:
 					DebugPrint("Local Control %s\n", data2 ? "On" : "Off");
@@ -109,6 +117,7 @@ namespace Midi
 				break;
 			case MIDI_PITCH_WHEEL_CHANGE:
 				DebugPrint("Pitch Wheel Change: value=%d\n", (data2 << 7) + data1 - 0x2000);
+				Control::SetPitchWheel((data2 << 7) + data1 - 0x2000);
 				break;
 			case MIDI_SYSTEM:
 				DebugPrint("System %02x %02x %02x\n", data1, data2);

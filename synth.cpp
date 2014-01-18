@@ -12,6 +12,7 @@ Copyright 2014 Kenneth D. Miller III
 #include "Keys.h"
 #include "Voice.h"
 #include "Midi.h"
+#include "Control.h"
 
 #include "PolyBLEP.h"
 #include "Oscillator.h"
@@ -104,8 +105,8 @@ DWORD CALLBACK WriteStream(HSTREAM handle, short *buffer, DWORD length, void *us
 			// get the voice index
 			int v = index[i];
 
-			// key frequency (taking octave shift into account)
-			float const key_freq = note_frequency[voice_note[v]];
+			// key frequency (taking pitch wheel control into account)
+			float const key_freq = Control::pitch_scale * note_frequency[voice_note[v]];
 
 			// update filter envelope generator
 			float const flt_env_amplitude = flt_env_state[v].Update(flt_env_config, step);
@@ -294,6 +295,9 @@ void main(int argc, char **argv)
 
 	// enable the first oscillator
 	osc_config[0].enable = true;
+
+	// reset all controllers
+	Control::ResetAll();
 
 	// show all menus
 	for (int i = 0; i < Menu::MENU_COUNT - (info.dsver < 8); ++i)
