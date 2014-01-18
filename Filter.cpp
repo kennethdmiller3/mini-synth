@@ -7,11 +7,18 @@ Filter
 #include "StdAfx.h"
 
 #include "Filter.h"
+#include "Envelope.h"
 #include "Math.h"
 #include "Voice.h"
 
 // filter configuration
-FilterConfig flt_config(false, FilterConfig::LOWPASS_4, 0.0f, 0.0f, 0.0f, 0.0f);
+FilterConfig flt_config(false, FilterConfig::LOWPASS_4, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f);
+
+// filter envelope config
+EnvelopeConfig flt_env_config(false, 0.0f, 1.0f, 0.0f, 0.1f);
+
+// filter envelope state
+EnvelopeState flt_env_state[VOICES];
 
 // filter mode names
 char const * const filter_name[FilterConfig::COUNT] =

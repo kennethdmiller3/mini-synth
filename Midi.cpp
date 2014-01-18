@@ -69,7 +69,10 @@ namespace Midi
 				break;
 			case MIDI_NOTE_ON:
 				DebugPrint("Note On:        note=%d velocity=%d\n", data1, data2);
-				NoteOn(data1, data2);
+				if (data2)
+					NoteOn(data1, data2);
+				else
+					NoteOff(data1);
 				break;
 			case MIDI_KEY_PRESSURE:
 				DebugPrint("Key Pressure:   note=%d pressure=%d\n", data1, data2);

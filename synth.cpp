@@ -21,8 +21,8 @@ Copyright 2014 Kenneth D. Miller III
 #include "SubOscillator.h"
 #include "Wave.h"
 #include "WavePoly.h"
-#include "Envelope.h"
 #include "Filter.h"
+#include "Amplifier.h"
 #include "Effect.h"
 
 #include "DisplaySpectrumAnalyzer.h"
@@ -55,7 +55,7 @@ DWORD CALLBACK WriteStream(HSTREAM handle, short *buffer, DWORD length, void *us
 	int active = 0;
 	for (int v = 0; v < VOICES; v++)
 	{
-		if (vol_env_state[v].state != EnvelopeState::OFF)
+		if (amp_env_state[v].state != EnvelopeState::OFF)
 		{
 			index[active++] = v;
 		}
@@ -108,14 +108,20 @@ DWORD CALLBACK WriteStream(HSTREAM handle, short *buffer, DWORD length, void *us
 			// key frequency (taking pitch wheel control into account)
 			float const key_freq = Control::pitch_scale * note_frequency[voice_note[v]];
 
+			// key velocity
+			float const key_vel = voice_vel[v] / 64.0f;
+
 			// update filter envelope generator
 			float const flt_env_amplitude = flt_env_state[v].Update(flt_env_config, step);
 
 			// update volume envelope generator
-			float const vol_env_amplitude = vol_env_state[v].Update(vol_env_config, step);
+			float const amp_env_amplitude = amp_env_state[v].Update(amp_env_config, step);
+
+			// update amplifier level
+			float const amp_level = amp_config.GetLevel(amp_env_amplitude, key_vel);
 
 			// if the envelope generator finished...
-			if (vol_env_state[v].state == EnvelopeState::OFF)
+			if (amp_env_state[v].state == EnvelopeState::OFF)
 			{
 				// remove from active oscillators
 				--active;
@@ -147,7 +153,7 @@ DWORD CALLBACK WriteStream(HSTREAM handle, short *buffer, DWORD length, void *us
 			{
 				// compute cutoff frequency
 				// (assume key follow)
-				float const cutoff = key_freq * powf(2, flt_config.cutoff_base + flt_config.cutoff_lfo * lfo + flt_config.cutoff_env * flt_env_amplitude);
+				float const cutoff = key_freq * flt_config.GetCutoff(lfo, flt_env_amplitude, key_vel);
 
 				// get filtered oscillator value
 				flt_value = flt_state[v].Update(flt_config, cutoff, osc_value, step);
@@ -158,8 +164,8 @@ DWORD CALLBACK WriteStream(HSTREAM handle, short *buffer, DWORD length, void *us
 				flt_value = osc_value;
 			}
 
-			// apply envelope to amplitude and accumulate result
-			sample += flt_value * vol_env_amplitude;
+			// apply amplifier level and accumulate result
+			sample += flt_value * amp_level;
 		}
 
 		// left and right channels are the same

@@ -47,10 +47,3 @@ public:
 
 	float Update(EnvelopeConfig const &config, float const step);
 };
-
-
-extern EnvelopeConfig flt_env_config;
-extern EnvelopeConfig vol_env_config;
-
-extern EnvelopeState flt_env_state[];
-extern EnvelopeState vol_env_state[];

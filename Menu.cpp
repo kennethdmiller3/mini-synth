@@ -11,7 +11,7 @@ Menu Functions
 #include "MenuOSC.h"
 #include "MenuLFO.h"
 #include "MenuFLT.h"
-#include "MenuVOL.h"
+#include "MenuAMP.h"
 #include "MenuFX.h"
 
 namespace Menu
@@ -29,7 +29,7 @@ namespace Menu
 		"OSC2",
 		"LFO",
 		"FLT",
-		"VOL",
+		"AMP",
 		"FX",
 	};
 
@@ -40,7 +40,7 @@ namespace Menu
 		{ 21, 12 },	// MENU_OSC2,
 		{ 41, 12 },	// MENU_LFO,
 		{ 41, 18 },	// MENU_FLT,
-		{ 61, 12 },	// MENU_VOL,
+		{ 61, 10 },	// MENU_AMP,
 		{ 61, 18 },	// MENU_FX,
 	};
 	// menu attributes
@@ -180,7 +180,7 @@ namespace Menu
 		{ Menu::OSC::Update, Menu::OSC::Print, Menu::OSC::OSC_COUNT },
 		{ Menu::LFO::Update, Menu::LFO::Print, Menu::LFO::LFO_COUNT },
 		{ Menu::FLT::Update, Menu::FLT::Print, Menu::FLT::FLT_COUNT },
-		{ Menu::VOL::Update, Menu::VOL::Print, Menu::VOL::VOL_COUNT },
+		{ Menu::AMP::Update, Menu::AMP::Print, Menu::AMP::AMP_COUNT },
 		{ Menu::FX::Update, Menu::FX::Print, Menu::FX::FX_COUNT },
 	};
 

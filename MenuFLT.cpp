@@ -39,6 +39,9 @@ namespace Menu
 			case FLT_CUTOFF_ENV:
 				UpdateFrequencyProperty(flt_config.cutoff_env, sign, modifiers, -10, 10);
 				break;
+			case FLT_CUTOFF_ENV_VEL:
+				UpdateFrequencyProperty(flt_config.cutoff_env_vel, sign, modifiers, -10, 10);
+				break;
 			case FLT_ENV_ATTACK:
 				UpdateTimeProperty(flt_env_config.attack_time, sign, modifiers, 0, 10);
 				flt_env_config.attack_rate = 1.0f / Max(flt_env_config.attack_time, 0.0001f);
@@ -80,6 +83,9 @@ namespace Menu
 				break;
 			case FLT_CUTOFF_ENV:
 				PrintConsoleWithAttribute(hOut, pos, item_attrib[flags], "Cutoff ENV:% 7.2f", flt_config.cutoff_env * 12.0f);
+				break;
+			case FLT_CUTOFF_ENV_VEL:
+				PrintConsoleWithAttribute(hOut, pos, item_attrib[flags], "Cutoff VEL:% 7.2f", flt_config.cutoff_env_vel * 12.0f);
 				break;
 			case FLT_ENV_ATTACK:
 				PrintConsoleWithAttribute(hOut, pos, item_attrib[flags], "Attack:   %7.3fs", flt_env_config.attack_time);

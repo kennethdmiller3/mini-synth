@@ -17,14 +17,6 @@ static const float ENV_DECAY_CONSTANT = 3.0f;
 static float const ENV_ATTACK_BIAS = 1.0f / (1.0f - expf(-ENV_ATTACK_CONSTANT)) - 1.0f;
 static float const ENV_DECAY_BIAS = 1.0f - 1.0f / (1.0f - expf(-ENV_DECAY_CONSTANT));
 
-// envelope config
-EnvelopeConfig flt_env_config(false, 0.0f, 1.0f, 0.0f, 0.1f);
-EnvelopeConfig vol_env_config(false, 0.0f, 1.0f, 1.0f, 0.1f);
-
-// envelope state
-EnvelopeState flt_env_state[VOICES];
-EnvelopeState vol_env_state[VOICES];
-
 // envelope config constructor
 EnvelopeConfig::EnvelopeConfig(bool const enable, float const attack_time, float const decay_time, float const sustain_level, float const release_time)
 : enable(enable)

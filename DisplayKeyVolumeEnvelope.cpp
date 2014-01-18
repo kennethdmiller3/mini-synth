@@ -12,6 +12,7 @@ Per-Key Volume Envelope Display
 #include "Console.h"
 #include "Keys.h"
 #include "Voice.h"
+#include "Amplifier.h"
 
 static COORD const key_pos = { 12, SPECTRUM_HEIGHT };
 static COORD const voice_pos = { 73 - VOICES, 49 };
@@ -48,7 +49,7 @@ void UpdateKeyVolumeEnvelopeDisplay(HANDLE hOut)
 	memset(voice_env_attrib, env_attrib[0], sizeof(voice_env_attrib));
 	for (int v = 0; v < VOICES; ++v)
 	{
-		EnvelopeState::State state = vol_env_state[v].state;
+		EnvelopeState::State state = amp_env_state[v].state;
 		if (state != EnvelopeState::OFF)
 			note_env_attrib[voice_note[v]] = voice_env_attrib[v] = env_attrib[state];
 	}

@@ -28,8 +28,8 @@ extern int note_most_recent;
 
 // note on
 // (returns voice index)
-extern int NoteOn(int note, int velocity = 127);
+extern int NoteOn(int note, int velocity = 64);
 
 // note off
 // (returns voice index)
-extern int NoteOff(int note, int velocity = 127);
+extern int NoteOff(int note, int velocity = 64);
