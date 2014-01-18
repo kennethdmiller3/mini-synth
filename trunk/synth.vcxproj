@@ -92,6 +92,7 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="Amplifier.cpp" />
     <ClCompile Include="Console.cpp" />
     <ClCompile Include="Control.cpp" />
     <ClCompile Include="Debug.cpp" />
@@ -105,11 +106,11 @@
     <ClCompile Include="Filter.cpp" />
     <ClCompile Include="Keys.cpp" />
     <ClCompile Include="Menu.cpp" />
+    <ClCompile Include="MenuAMP.cpp" />
     <ClCompile Include="MenuFLT.cpp" />
     <ClCompile Include="MenuFX.cpp" />
     <ClCompile Include="MenuLFO.cpp" />
     <ClCompile Include="MenuOSC.cpp" />
-    <ClCompile Include="MenuVOL.cpp" />
     <ClCompile Include="Midi.cpp" />
     <ClCompile Include="Oscillator.cpp" />
     <ClCompile Include="OscillatorLFO.cpp" />
@@ -131,6 +132,7 @@
     <ClCompile Include="WaveTriangle.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="Amplifier.h" />
     <ClInclude Include="Console.h" />
     <ClInclude Include="Control.h" />
     <ClInclude Include="Debug.h" />
@@ -145,11 +147,11 @@
     <ClInclude Include="Keys.h" />
     <ClInclude Include="Math.h" />
     <ClInclude Include="Menu.h" />
+    <ClInclude Include="MenuAMP.h" />
     <ClInclude Include="MenuFLT.h" />
     <ClInclude Include="MenuFX.h" />
     <ClInclude Include="MenuLFO.h" />
     <ClInclude Include="MenuOSC.h" />
-    <ClInclude Include="MenuVOL.h" />
     <ClInclude Include="Midi.h" />
     <ClInclude Include="Oscillator.h" />
     <ClInclude Include="OscillatorLFO.h" />

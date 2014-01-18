@@ -15,7 +15,7 @@ namespace Menu
 		MENU_OSC2,
 		MENU_LFO,
 		MENU_FLT,
-		MENU_VOL,
+		MENU_AMP,
 		MENU_FX,
 
 		MENU_COUNT

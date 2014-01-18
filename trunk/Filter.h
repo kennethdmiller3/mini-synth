@@ -6,6 +6,8 @@ Copyright 2014 Kenneth D. Miller III
 Filter
 */
 
+#include "Envelope.h"
+
 // filter type
 #define FILTER_IMPROVED_MOOG 0
 #define FILTER_NONLINEAR_MOOG 1
@@ -43,30 +45,32 @@ public:
 	};
 	Mode mode;
 
+	// resonance parameter
+	float resonance;
+
 	// cutoff frequency (logarithmic)
 	float cutoff_base;
 	float cutoff_lfo;
 	float cutoff_env;
+	float cutoff_env_vel;
 
-	// resonance parameter
-	float resonance;
-
-	FilterConfig(bool const enable, Mode const mode, float const cutoff_base, float const cutoff_lfo, float const cutoff_env, float const resonance)
+	FilterConfig(bool const enable, Mode const mode, float const resonance, float const cutoff_base, float const cutoff_lfo, float const cutoff_env, float const cutoff_env_vel)
 		: enable(enable)
 		, mode(mode)
 		, cutoff_base(cutoff_base)
 		, cutoff_lfo(cutoff_lfo)
 		, cutoff_env(cutoff_env)
+		, cutoff_env_vel(cutoff_env_vel)
 		, resonance(resonance)
 	{
 	}
+
+	// get the modulated cutoff value
+	float GetCutoff(float const lfo, float const env, float const vel)
+	{
+		return powf(2, cutoff_base + lfo * cutoff_lfo + env * (cutoff_env + vel * cutoff_env_vel));
+	}
 };
-
-// filter mode names
-extern char const * const filter_name[FilterConfig::COUNT];
-
-// filter configuration
-extern FilterConfig flt_config;
 
 // filter state
 class FilterState
@@ -119,5 +123,17 @@ public:
 	float Update(FilterConfig const &config, float const cutoff, float const input, float const step);
 };
 
+// filter mode names
+extern char const * const filter_name[FilterConfig::COUNT];
+
+// filter configuration
+extern FilterConfig flt_config;
+
+// filter envelope configuration
+extern EnvelopeConfig flt_env_config;
+
 // filter state
 extern FilterState flt_state[];
+
+// filter envelope state
+extern EnvelopeState flt_env_state[];

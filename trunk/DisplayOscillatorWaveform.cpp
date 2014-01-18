@@ -12,7 +12,7 @@ Oscillator Waveform Display
 #include "OscillatorNote.h"
 #include "SubOscillator.h"
 #include "Filter.h"
-#include "Envelope.h"
+#include "Amplifier.h"
 #include "Wave.h"
 #include "Voice.h"
 #include "Control.h"
@@ -92,11 +92,14 @@ void UpdateOscillatorWaveformDisplay(HANDLE hOut, BASS_INFO const &info, int con
 	// key frequency
 	float const key_freq = Control::pitch_scale * note_frequency[voice_note[v]];
 
+	// key velocity
+	float const key_vel = voice_vel[v] / 64.0f;
+
 	// update filter envelope generator
 	float const flt_env_amplitude = flt_env_state[v].amplitude;
 
 	// update volume envelope generator
-	float const vol_env_amplitude = vol_env_config.enable ? vol_env_state[v].amplitude : 1;
+	float const amp_env_amplitude = amp_env_config.enable ? amp_env_state[v].amplitude : 1;
 
 	// base phase delta
 	float const delta_base = key_freq / info.freq;
@@ -134,7 +137,7 @@ void UpdateOscillatorWaveformDisplay(HANDLE hOut, BASS_INFO const &info, int con
 
 	// compute cutoff frequency
 	// (assume key follow)
-	float const cutoff = powf(2, flt_config.cutoff_base + flt_config.cutoff_lfo * lfo + flt_config.cutoff_env * flt_env_amplitude);
+	float const cutoff = flt_config.GetCutoff(lfo, flt_env_amplitude, key_vel);
 
 	// elapsed time in milliseconds since the previous frame
 	static DWORD prevTime = timeGetTime();
@@ -147,10 +150,10 @@ void UpdateOscillatorWaveformDisplay(HANDLE hOut, BASS_INFO const &info, int con
 		filter.Reset();
 		prev_v = v;
 	}
-	if (prev_active != (vol_env_state[v].state != EnvelopeState::OFF))
+	if (prev_active != (amp_env_state[v].state != EnvelopeState::OFF))
 	{
 		filter.Reset();
-		prev_active = (vol_env_state[v].state != EnvelopeState::OFF);
+		prev_active = (amp_env_state[v].state != EnvelopeState::OFF);
 	}
 
 	// if the filter is enabled...
@@ -196,7 +199,7 @@ void UpdateOscillatorWaveformDisplay(HANDLE hOut, BASS_INFO const &info, int con
 	for (int x = 0; x < WAVEFORM_WIDTH; ++x)
 	{
 		// sum the oscillator outputs
-		float const value = vol_env_amplitude * UpdateWaveformStep(config, state, step, delta, cutoff, filter, step_base);
+		float const value = amp_env_amplitude * UpdateWaveformStep(config, state, step, delta, cutoff, filter, step_base);
 
 		// plot waveform column
 		int grid_y = FloorInt(-(WAVEFORM_HEIGHT - 0.5f) * value);

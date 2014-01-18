@@ -1,9 +1,9 @@
 #include "StdAfx.h"
 
 #include "Voice.h"
-#include "Envelope.h"
 #include "OscillatorNote.h"
 #include "Filter.h"
+#include "Amplifier.h"
 
 // midi note frequencies
 float note_frequency[NOTES];
@@ -34,7 +34,7 @@ int ChooseVoice(int note)
 	for (int v = 0; v < VOICES; ++v)
 	{
 		// if retriggering the voice or the voice is currently off...
-		if (voice_note[v] == note || vol_env_state[v].state == EnvelopeState::OFF)
+		if (voice_note[v] == note || amp_env_state[v].state == EnvelopeState::OFF)
 		{
 			// use this voice
 			voice = v;
@@ -42,11 +42,11 @@ int ChooseVoice(int note)
 		}
 
 		// if the voice is quieter than the current quietest...
-		if (vol_env_state[v].amplitude < quietest_amplitude)
+		if (amp_env_state[v].amplitude < quietest_amplitude)
 		{
 			// use that
 			quietest_voice = v;
-			quietest_amplitude = vol_env_state[v].amplitude;
+			quietest_amplitude = amp_env_state[v].amplitude;
 		}
 	}
 
@@ -87,7 +87,7 @@ int NoteOn(int note, int velocity)
 	flt_state[voice].Reset();
 
 	// gate the volume envelope
-	vol_env_state[voice].Gate(vol_env_config, true);
+	amp_env_state[voice].Gate(amp_env_config, true);
 
 	// gate the filter envelope
 	flt_env_state[voice].Gate(flt_env_config, true);
@@ -104,11 +104,10 @@ int NoteOff(int note, int velocity)
 	if (voice < 0)
 		return voice;
 
-	// update voice velocity
-	voice_vel[voice] = unsigned char(velocity);
+	// TO DO: use note-off velocity
 
 	// gate the volume envelope
-	vol_env_state[voice].Gate(vol_env_config, false);
+	amp_env_state[voice].Gate(amp_env_config, false);
 
 	// gate the filter envelope
 	flt_env_state[voice].Gate(flt_env_config, false);
