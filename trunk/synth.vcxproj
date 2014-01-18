@@ -93,6 +93,7 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="Console.cpp" />
+    <ClCompile Include="Control.cpp" />
     <ClCompile Include="Debug.cpp" />
     <ClCompile Include="DisplayKeyVolumeEnvelope.cpp" />
     <ClCompile Include="DisplayLowFrequencyOscillator.cpp" />
@@ -131,6 +132,7 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Console.h" />
+    <ClInclude Include="Control.h" />
     <ClInclude Include="Debug.h" />
     <ClInclude Include="DisplayKeyVolumeEnvelope.h" />
     <ClInclude Include="DisplayLowFrequencyOscillator.h" />

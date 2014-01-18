@@ -12,7 +12,7 @@ Voice Assignment
 extern float note_frequency[NOTES];
 
 // number of voices
-#define VOICES 12
+#define VOICES 16
 
 // current note assignemnts
 // (via keyboard or midi input)
