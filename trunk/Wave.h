@@ -20,6 +20,7 @@ enum Wave
 	WAVE_SAWTOOTH,
 	WAVE_TRIANGLE,
 	WAVE_NOISE,
+	WAVE_NOISE_HOLD,
 
 	WAVE_POLY4,			// Atari POKEY AUDC 12
 	WAVE_POLY5,			// Atari TIA AUDC 7 or 9
@@ -33,13 +34,14 @@ enum Wave
 	WAVE_COUNT
 };
 
-// oscillator wave function
 class OscillatorConfig;
 class OscillatorState;
-typedef float(*OscillatorFunc)(OscillatorConfig const &config, OscillatorState &state, float step);
 
-// map wave type enumeration to oscillator function
-extern OscillatorFunc const oscillator[WAVE_COUNT];
+// wave evaluation function: returns wave value
+typedef float(*WaveEvaluate)(OscillatorConfig const &config, OscillatorState &state, float step);
+
+// map wave type to wave evaluator
+extern WaveEvaluate const wave_evaluate[WAVE_COUNT];
 
 // names for wave types
 extern char const * const wave_name[WAVE_COUNT];
@@ -49,3 +51,6 @@ extern float const wave_adjust_frequency[WAVE_COUNT];
 
 // restart the oscillator loop index after this many phase cycles
 extern int const wave_loop_cycle[WAVE_COUNT];
+
+// initialize wave
+extern void InitWave();

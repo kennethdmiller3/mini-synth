@@ -43,7 +43,7 @@ float OscillatorState::Update(OscillatorConfig const &config, float const freque
 // compute the oscillator value
 float OscillatorState::Compute(OscillatorConfig const &config, float delta)
 {
-	return config.amplitude * oscillator[config.wavetype](config, *this, delta);
+	return config.amplitude * wave_evaluate[config.wavetype](config, *this, delta);
 }
 
 // advance the oscillator phase

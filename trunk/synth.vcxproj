@@ -124,6 +124,7 @@
     <ClCompile Include="synth.cpp" />
     <ClCompile Include="Voice.cpp" />
     <ClCompile Include="Wave.cpp" />
+    <ClCompile Include="WaveHold.cpp" />
     <ClCompile Include="WaveNoise.cpp" />
     <ClCompile Include="WavePoly.cpp" />
     <ClCompile Include="WavePulse.cpp" />
@@ -162,6 +163,7 @@
     <ClInclude Include="SubOscillator.h" />
     <ClInclude Include="Voice.h" />
     <ClInclude Include="Wave.h" />
+    <ClInclude Include="WaveHold.h" />
     <ClInclude Include="WaveNoise.h" />
     <ClInclude Include="WavePoly.h" />
     <ClInclude Include="WavePulse.h" />

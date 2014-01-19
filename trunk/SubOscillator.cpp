@@ -28,13 +28,13 @@ float SubOscillator(NoteOscillatorConfig const &config, OscillatorState const &s
 	{
 		float sub_prev = ((state.index - 1) & config.sub_osc_mode) ? -1.0f : 1.0f;
 		if (sub_value != sub_prev)
-			sub_value += 0.5f * (sub_value - sub_prev) * PolyBLEP(state.phase, w);
+			sub_value += PolyBLEP(state.phase, w, sub_value - sub_prev);
 	}
 	else
 	{
 		float sub_next = ((state.index + 1) & config.sub_osc_mode) ? -1.0f : 1.0f;
 		if (sub_value != sub_next)
-			sub_value += 0.5f * (sub_next - sub_value) * PolyBLEP(state.phase - 1, w);
+			sub_value += PolyBLEP(state.phase - 1, w, sub_next - sub_value);
 	}
 	return sub_value;
 }

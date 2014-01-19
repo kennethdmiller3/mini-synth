@@ -110,7 +110,7 @@ static float OscillatorPoly(OscillatorConfig const &config, OscillatorState &sta
 		return 0;
 
 	// current wavetable value
-	float value = poly[state.index] ? 1.0f : -1.0f;
+	float value = poly[state.index];
 #if ANTIALIAS == ANTIALIAS_POLYBLEP
 	if (use_antialias)
 	{
@@ -133,13 +133,13 @@ static float OscillatorPoly(OscillatorConfig const &config, OscillatorState &sta
 				t -= 1.0f;
 				char v1 = poly[i];
 				if (v0 != v1)
-					value += (v1 - v0) * PolyBLEP(t, w);
+					value += PolyBLEP(t, w, v1 - v0);
 				v0 = v1;
 			}
 		}
 	}
 #endif
-	return value;
+	return value + value - 1.0f;
 }
 
 // poly4 oscillator

@@ -13,18 +13,20 @@ Wave Types
 #include "WaveTriangle.h"
 #include "WaveNoise.h"
 #include "WavePoly.h"
+#include "WaveHold.h"
 
 // waveform antialiasing
 bool use_antialias = true;
 
 // map wave type enumeration to oscillator function
-OscillatorFunc const oscillator[WAVE_COUNT] =
+WaveEvaluate const wave_evaluate[WAVE_COUNT] =
 {
 	OscillatorSine,			// WAVE_SINE,
 	OscillatorPulse,		// WAVE_PULSE,
 	OscillatorSawtooth,		// WAVE_SAWTOOTH,
 	OscillatorTriangle,		// WAVE_TRIANGLE,
 	OscillatorNoise,		// WAVE_NOISE,
+	OscillatorNoiseHold,	// WAVE_NOISE_HOLD
 	OscillatorPoly4,		// WAVE_POLY4,
 	OscillatorPoly5,		// WAVE_POLY5,
 	OscillatorPeriod93,		// WAVE_PERIOD93,
@@ -32,7 +34,7 @@ OscillatorFunc const oscillator[WAVE_COUNT] =
 	OscillatorPoly17,		// WAVE_POLY17,
 	OscillatorPulsePoly5,	// WAVE_PULSE_POLY5,
 	OscillatorPoly4Poly5,	// WAVE_POLY4_POLY5,
-	OscillatorPoly17Poly5	// WAVE_POLY17_POLY5,
+	OscillatorPoly17Poly5,	// WAVE_POLY17_POLY5,
 };
 
 // names for wave types
@@ -43,6 +45,7 @@ char const * const wave_name[WAVE_COUNT] =
 	"Sawtooth",		// WAVE_SAWTOOTH,
 	"Triangle",		// WAVE_TRIANGLE,
 	"Noise",		// WAVE_NOISE,
+	"Noise Hold",	// WAVE_NOISE_HOLD
 	"Poly4",		// WAVE_POLY4,
 	"Poly5",		// WAVE_POLY5,
 	"Period-93",	// WAVE_PERIOD93,
@@ -64,6 +67,7 @@ float const wave_adjust_frequency[WAVE_COUNT] =
 	1.0f,					// WAVE_SAWTOOTH,
 	1.0f,					// WAVE_TRIANGLE,
 	1.0f, 					// WAVE_NOISE,
+	1.0f,					// WAVE_NOISE_HOLD,
 	2.0f * 15.0f / 16.0f,	// WAVE_POLY4,
 	2.0f * 31.0f / 32.0f,	// WAVE_POLY5,
 	2.0f * 93.0f / 128.0f,	// WAVE_PERIOD93,
@@ -83,6 +87,7 @@ int const wave_loop_cycle[WAVE_COUNT] =
 	INT_MAX,					// WAVE_SAWTOOTH,
 	INT_MAX,					// WAVE_TRIANGLE,
 	INT_MAX,					// WAVE_NOISE,
+	ARRAY_SIZE(noise),			// WAVE_NOISE_HOLD
 	ARRAY_SIZE(poly4),			// WAVE_POLY4,
 	ARRAY_SIZE(poly5),			// WAVE_POLY5,
 	ARRAY_SIZE(period93),		// WAVE_PERIOD93,
@@ -92,3 +97,9 @@ int const wave_loop_cycle[WAVE_COUNT] =
 	ARRAY_SIZE(poly4poly5),		// WAVE_POLY4_POLY5,
 	ARRAY_SIZE(poly17poly5),	// WAVE_POLY17_POLY5,
 };
+
+void InitWave()
+{
+	InitPoly();
+	InitNoise();
+}

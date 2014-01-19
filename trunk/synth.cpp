@@ -20,7 +20,6 @@ Copyright 2014 Kenneth D. Miller III
 #include "OscillatorNote.h"
 #include "SubOscillator.h"
 #include "Wave.h"
-#include "WavePoly.h"
 #include "Filter.h"
 #include "Amplifier.h"
 #include "Effect.h"
@@ -281,8 +280,8 @@ void main(int argc, char **argv)
 	InitSawtooth();
 #endif
 
-	// initialize polynomial noise tables
-	InitPoly();
+	// initialize waves
+	InitWave();
 
 	// compute frequency for each note
 	for (int n = 0; n < NOTES; ++n)
