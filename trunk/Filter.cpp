@@ -151,8 +151,8 @@ void FilterState::Setup(float const cutoff, float const resonance, float const s
 #endif
 }
 
-// apply the filter
-float FilterState::Apply(float const input, float const mix[])
+// update the filter
+float FilterState::Update(FilterConfig const &config, float const input)
 {
 #if FILTER == FILTER_IMPROVED_MOOG
 
@@ -191,6 +191,7 @@ float FilterState::Apply(float const input, float const mix[])
 	}
 
 	// generate output by mixing stage values
+	float const *mix = filter_mix[config.mode];
 	return
 		y[0] * mix[0] +
 		y[1] * mix[1] +
@@ -235,14 +236,4 @@ float FilterState::Apply(float const input, float const mix[])
 		z[4] * mix[4];
 
 #endif
-}
-
-// update the filter
-float FilterState::Update(FilterConfig const &config, float const cutoff, float const input, float const step)
-{
-	// compute filter values
-	Setup(cutoff, flt_config.resonance, step);
-
-	// apply the filter
-	return Apply(input, filter_mix[flt_config.mode]);
 }

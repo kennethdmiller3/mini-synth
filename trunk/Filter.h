@@ -119,8 +119,7 @@ public:
 	}
 	void Reset(void);
 	void Setup(float const cutoff, float const resonance, float const step);
-	float Apply(float const input, float const mix[]);
-	float Update(FilterConfig const &config, float const cutoff, float const input, float const step);
+	float Update(FilterConfig const &config, float const input);
 };
 
 // filter mode names
