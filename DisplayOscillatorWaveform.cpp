@@ -81,9 +81,9 @@ void UpdateOscillatorWaveformDisplay(HANDLE hOut, BASS_INFO const &info, int con
 		else
 			cycle = 4;
 	}
-	else if (cycle > WAVEFORM_WIDTH)
+	else if (cycle > WAVEFORM_WIDTH / 2)
 	{
-		cycle = WAVEFORM_WIDTH;
+		cycle = WAVEFORM_WIDTH / 2;
 	}
 
 	// base phase step for plot

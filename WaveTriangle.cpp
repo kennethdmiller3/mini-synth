@@ -44,9 +44,8 @@ float OscillatorTriangle(OscillatorConfig const &config, OscillatorState &state,
 					value += IntegratedPolyBLEP(state.phase, w);
 
 				// wave value discontinuity creates a | transition 
-				float sync_value = GetTriangleValue(config.sync_phase);
-				float const delta_value = -0.5f * sync_value;
-				value += delta_value * PolyBLEP(state.phase, w);
+				float const sync_value = GetTriangleValue(config.sync_phase);
+				value -= PolyBLEP(state.phase, w, sync_value);
 			}
 
 			// handle /\ and \/ slope discontinuities
@@ -64,9 +63,8 @@ float OscillatorTriangle(OscillatorConfig const &config, OscillatorState &state,
 					value += IntegratedPolyBLEP(state.phase - config.sync_phase, w);
 
 				// wave value discontinuity creates a | transition 
-				float sync_value = GetTriangleValue(config.sync_phase);
-				float const delta_value = -0.5f * sync_value;
-				value += delta_value * PolyBLEP(state.phase - config.sync_phase, w);
+				float const sync_value = GetTriangleValue(config.sync_phase);
+				value += PolyBLEP(state.phase - config.sync_phase, w, sync_value);
 			}
 		}
 		else

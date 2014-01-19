@@ -35,11 +35,13 @@ float OscillatorPulse(OscillatorConfig const &config, OscillatorState &state, fl
 	{
 		float const w = Min(step * POLYBLEP_WIDTH, 1.0f);
 
-		// nearest up edge
-		float const up_nearest = float(RoundInt(state.phase));
+		// up edges before and after the current phase
+		float const up_before = float(FloorInt(state.phase));
+		float const up_after = up_before + 1;
 
-		// nearest down edge
-		float const down_nearest = float(RoundInt(state.phase - config.waveparam)) + config.waveparam;
+		// down edges before and after the current phase
+		float const down_before = float(FloorInt(state.phase - config.waveparam)) + config.waveparam;
+		float const down_after = down_before + 1;
 
 		if (config.sync_enable)
 		{
@@ -64,13 +66,17 @@ float OscillatorPulse(OscillatorConfig const &config, OscillatorState &state, fl
 				value += PolyBLEP(state.phase - (up_before_sync - config.sync_phase), w);
 			}
 
-			// handle nearest up transition if it's in range
-			if (up_nearest > 0 && up_nearest <= up_before_sync)
-				value += PolyBLEP(state.phase - up_nearest, w);
+			// handle up transitions if they're in range
+			if (up_before > 0)
+				value += PolyBLEP(state.phase - up_before, w);
+			if (up_after <= up_before_sync)
+				value += PolyBLEP(state.phase - up_after, w);
 
-			// handle nearest down transition if it's in range
-			if (down_nearest > 0 && down_nearest < config.sync_phase)
-				value -= PolyBLEP(state.phase - down_nearest, w);
+			// handle down transitions if they're in range
+			if (down_before > 0)
+				value -= PolyBLEP(state.phase - down_before, w);
+			if (down_after < config.sync_phase)
+				value -= PolyBLEP(state.phase - down_after, w);
 
 			// handle discontinuity at sync phase
 			if (config.sync_phase > up_before_sync + config.waveparam)
@@ -81,8 +87,10 @@ float OscillatorPulse(OscillatorConfig const &config, OscillatorState &state, fl
 		}
 		else
 		{
-			value += PolyBLEP(state.phase - up_nearest, w);
-			value -= PolyBLEP(state.phase - down_nearest, w);
+			value += PolyBLEP(state.phase - up_before, w);
+			value += PolyBLEP(state.phase - up_after, w);
+			value -= PolyBLEP(state.phase - down_before, w);
+			value -= PolyBLEP(state.phase - down_after, w);
 		}
 	}
 #endif
