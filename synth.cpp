@@ -47,6 +47,8 @@ char const title_text[] = ">>> MINI VIRTUAL ANALOG SYNTHESIZER";
 // output scale factor
 float output_scale = 0.25f;	// 0.25f;
 
+static int const LFO_UPDATE_SAMPLES = 16;
+
 DWORD CALLBACK WriteStream(HSTREAM handle, short *buffer, DWORD length, void *user)
 {
 	// get active voices
@@ -83,41 +85,44 @@ DWORD CALLBACK WriteStream(HSTREAM handle, short *buffer, DWORD length, void *us
 	// time step per output sample
 	float const step = 1.0f / info.freq;
 
+	// low-frequency oscillator value
+	// (updated every LFO_UPDATE_SAMPLES)
+	float lfo = 0;
+	float const lfo_step = step * LFO_UPDATE_SAMPLES;
+
 	// for each output sample...
 	for (size_t c = 0; c < count; ++c)
 	{
-		// get low-frequency oscillator value
-		float const lfo = lfo_state.Update(lfo_config, 1.0f, step);
-
-		// compute shared oscillator values
-		for (int o = 0; o < NUM_OSCILLATORS; ++o)
+		if ((c & (LFO_UPDATE_SAMPLES - 1)) == 0)
 		{
-			osc_config[o].Modulate(lfo);
+			// get low-frequency oscillator value
+			lfo = lfo_state.Update(lfo_config, 1.0f, lfo_step);
+
+			// compute shared oscillator values
+			for (int o = 0; o < NUM_OSCILLATORS; ++o)
+			{
+				osc_config[o].Modulate(lfo);
+			}
+
+			// set up sync phases
+			for (int o = 1; o < NUM_OSCILLATORS; ++o)
+			{
+				if (osc_config[o].sync_enable)
+					osc_config[o].sync_phase = osc_config[o].frequency / osc_config[0].frequency;
+			}
 		}
 
 		// accumulated sample value
 		float sample = 0.0f;
 
-		// for each active oscillator...
+		// for each active voice...
 		for (int i = 0; i < active; ++i)
 		{
 			// get the voice index
 			int v = index[i];
 
-			// key frequency (taking pitch wheel control into account)
-			float const key_freq = Control::pitch_scale * note_frequency[voice_note[v]];
-
-			// key velocity
-			float const key_vel = voice_vel[v] / 64.0f;
-
-			// update filter envelope generator
-			float const flt_env_amplitude = flt_env_state[v].Update(flt_env_config, step);
-
 			// update volume envelope generator
 			float const amp_env_amplitude = amp_env_state[v].Update(amp_env_config, step);
-
-			// update amplifier level
-			float const amp_level = amp_config.GetLevel(amp_env_amplitude, key_vel);
 
 			// if the envelope generator finished...
 			if (amp_env_state[v].state == EnvelopeState::OFF)
@@ -129,12 +134,11 @@ DWORD CALLBACK WriteStream(HSTREAM handle, short *buffer, DWORD length, void *us
 				continue;
 			}
 
-			// set up sync phases
-			for (int o = 1; o < NUM_OSCILLATORS; ++o)
-			{
-				if (osc_config[o].sync_enable)
-					osc_config[o].sync_phase = osc_config[o].frequency / osc_config[0].frequency;
-			}
+			// key frequency (taking pitch wheel control into account)
+			float const key_freq = Control::pitch_scale * note_frequency[voice_note[v]];
+
+			// key velocity
+			float const key_vel = voice_vel[v] / 64.0f;
 
 			// update oscillator
 			// (assume key follow)
@@ -150,12 +154,21 @@ DWORD CALLBACK WriteStream(HSTREAM handle, short *buffer, DWORD length, void *us
 			float flt_value;
 			if (flt_config.enable)
 			{
-				// compute cutoff frequency
-				// (assume key follow)
-				float const cutoff = key_freq * flt_config.GetCutoff(lfo, flt_env_amplitude, key_vel);
+				if ((c & (LFO_UPDATE_SAMPLES - 1)) == 0)
+				{
+					// update filter envelope generator
+					float const flt_env_amplitude = flt_env_state[v].Update(flt_env_config, lfo_step);
+
+					// compute cutoff frequency
+					// (assume key follow)
+					float const cutoff = key_freq * flt_config.GetCutoff(lfo, flt_env_amplitude, key_vel);
+
+					// set up the filter
+					flt_state[v].Setup(cutoff, flt_config.resonance, step);
+				}
 
 				// get filtered oscillator value
-				flt_value = flt_state[v].Update(flt_config, cutoff, osc_value, step);
+				flt_value = flt_state[v].Update(flt_config, osc_value);
 			}
 			else
 			{
@@ -164,7 +177,7 @@ DWORD CALLBACK WriteStream(HSTREAM handle, short *buffer, DWORD length, void *us
 			}
 
 			// apply amplifier level and accumulate result
-			sample += flt_value * amp_level;
+			sample += flt_value * amp_config.GetLevel(amp_env_amplitude, key_vel);
 		}
 
 		// left and right channels are the same

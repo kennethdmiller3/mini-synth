@@ -32,7 +32,7 @@ static COORD const pos = { 0, 0 };
 static COORD const size = { WAVEFORM_WIDTH, WAVEFORM_HEIGHT };
 
 // plot one step
-static float UpdateWaveformStep(NoteOscillatorConfig config[], OscillatorState state[], float step[], float delta[], float cutoff, FilterState &filter, float step_base)
+static float UpdateWaveformStep(NoteOscillatorConfig config[], OscillatorState state[], float step[], float delta[], FilterState &filter)
 {
 	// sum the oscillator outputs
 	float value = 0.0f;
@@ -51,7 +51,7 @@ static float UpdateWaveformStep(NoteOscillatorConfig config[], OscillatorState s
 	if (flt_config.enable)
 	{
 		// apply filter
-		value = filter.Update(flt_config, cutoff, value, step_base);
+		value = filter.Update(flt_config, value);
 	}
 
 	return value;
@@ -139,6 +139,10 @@ void UpdateOscillatorWaveformDisplay(HANDLE hOut, BASS_INFO const &info, int con
 	// (assume key follow)
 	float const cutoff = flt_config.GetCutoff(lfo, flt_env_amplitude, key_vel);
 
+	// set up the filter
+	// (assume it is constant for the duration)
+	filter.Setup(cutoff, flt_config.resonance, step_base);
+
 	// elapsed time in milliseconds since the previous frame
 	static DWORD prevTime = timeGetTime();
 	DWORD deltaTime = timeGetTime() - prevTime;
@@ -176,7 +180,7 @@ void UpdateOscillatorWaveformDisplay(HANDLE hOut, BASS_INFO const &info, int con
 			for (int x = 0; x < steps; ++x)
 			{
 				// sum the oscillator outputs
-				UpdateWaveformStep(config, state, step, delta, cutoff, filter, step_base);
+				UpdateWaveformStep(config, state, step, delta, filter);
 			}
 		}
 	}
@@ -199,7 +203,7 @@ void UpdateOscillatorWaveformDisplay(HANDLE hOut, BASS_INFO const &info, int con
 	for (int x = 0; x < WAVEFORM_WIDTH; ++x)
 	{
 		// sum the oscillator outputs
-		float const value = amp_env_amplitude * UpdateWaveformStep(config, state, step, delta, cutoff, filter, step_base);
+		float const value = amp_env_amplitude * UpdateWaveformStep(config, state, step, delta, filter);
 
 		// plot waveform column
 		int grid_y = FloorInt(-(WAVEFORM_HEIGHT - 0.5f) * value);
