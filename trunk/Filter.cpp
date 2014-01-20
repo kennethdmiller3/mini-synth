@@ -38,11 +38,16 @@ char const * const filter_name[FilterConfig::COUNT] =
 	"Band 1 + High 1",
 	"Band 1 + High 2",
 	"Band-Pass 2",
-	"Notch",
-	"Notch + Low 1",
-	"Notch + Low 2",
-	"Phase Shift",
-	"Phase + Low 1",
+	"Notch 1",
+	"Notch 1 + Low 1",
+	"Notch 1 + Low 2",
+	"Notch 1 + High 1",
+	"Notch 1 + High 2",
+	"Notch 2",
+	"Phase Shift 1",
+	"Phase Shift 2",
+	"Phase Shift 3",
+	"Phase Shift 4",
 };
 
 // The Oberheim Xpander and Matrix-12 analog synthesizers use a typical four-
@@ -65,40 +70,88 @@ char const * const filter_name[FilterConfig::COUNT] =
 
 // Also: http://www.kvraudio.com/forum/viewtopic.php?p=3821632
 
-// LP(n) = y[n]
-// LP(n), HP(1) = y[n + 1] - y[n]
-// LP(n), HP(2) = -y[n + 2] + 2 * y[n + 1] - y[n]
-// LP(n), HP(3) = y[n + 3] + 3 * y[n + 2] + 3 * y[n + 1] - y[n]
-// LP(n), HP(4) = -y[n + 4] + 4 * y[n + 3] - 6 * y[n + 2] + 4 * y[n + 1] - y[n]
-// BP(1) = LP(1), HP(1)
-// BP(2) = LP(2), HP(2)
-// Notch = HP(2) - LP(2)
-// AP = 4 * y[3] - 6 * y[2] + 3*y[1] - y[0] = HP(4) + LP(4) - LP(2) ?
+// Creating Filters
+
+// Use stage output directly for a 1-pole low-pass filter:
+// LP(1) = y[1]
+
+// Subtract stage output from stage input for a 1-pole high-pass filter"
+// HP(1) = y[0] - y[1]
+
+// Add coefficient vectors (+) to apply filters in parallel:
+// Filter A: a0, a1, a2, a3, a4
+// Filter B: b0, b1, b2, b3, b4
+// Filter A + B: a0 + b0, a1 + b2, a2 + b2, a3 + b3, a4 + b4
+
+// Scale coefficient vector (*) to scale filter output:
+// Filter A: a0, a1, a2, a3, a4
+// Scale: s
+// Filter A * s: a0 * s, a1 * s, a2 * s, a3 * s, a4 * s
+
+// Convolve coefficient vectors (*) to apply filters in series:
+// Filter A: a0, a1, a2, a3, a4
+// Filter B: b0, b1, b2, b3, b4
+// Filter A * B:
+//		a0 * b0,
+//		a0 * b1 + a1 * b0,
+//		a0 * b2 + a1 * b1 + a2 * b0,
+//		a0 * b3 + a1 * b2 + a2 * b1 + a3 * b0,
+//		a0 * b4 + a1 * b3 + a2 * b2 + a3 * b1 + a4 * b0
+
+// Band-pass is a low-pass and high-pass in series:
+// BP(1) = HP(1) * LP(1) or LP(1) * HP(1) = y[1] - 2 y[2]
+
+// 1-Pole Low-Pass phase shift: -atan(frequency/cutoff)
+// 0 degrees at low frequencies
+// -45 degrees at the cutoff frequency
+// -90 degrees at high frequencies
+
+// 1-Pole High-Pass phase shift: pi/2 - atan(frequency/cutoff)
+// +90 degrees at low frequencies
+// +45 degrees at the cutoff frequency
+// 0 degrees at high frequencies
+
+// Filters in series combine phase shifts
+// 4P Band-Pass = 2P Low-Pass * 2P High-Pass = pi - 4 atan(frequency/cutoff))
+
+// Filters in parallel add signals
+// 2P Notch = 2P Low-Pass + 2P High-Pass
+// 2P Phase-Shift = 2P Low-Pass - 2P High-Pass
+// 2P Low-Pass phase shift: -2 atan(frequency/cutoff)
+// 2P High-Pass phase shift: pi - 2 atan(frequency/cutoff)
+// Signals are 180 degrees out of phase so they have opposite signs
+// 2P Notch adds the signals so they cancel each other
+// 2P Phase-Shift subtracts the signals so they reinforce each other
 
 // filter stage coefficients for each filter mode
 static float const filter_mix[FilterConfig::COUNT][5] =
 {
-	//y0  y1  y2  y3  y4 
-	{ 1, 0, 0, 0, 0 },	// PEAK,					// input with feedback term
-	{ 0, 1, 0, 0, 0 }, // LOWPASS_1,
-	{ 0, 0, 1, 0, 0 }, // LOWPASS_2,
-	{ 0, 0, 0, 1, 0 }, // LOWPASS_3,
-	{ 0, 0, 0, 0, 1 }, // LOWPASS_4,
-	{ 1, -1, 0, 0, 0 }, // HIGHPASS_1,
-	{ 1, -2, 1, 0, 0 }, // HIGHPASS_2,
-	{ 1, -3, 3, -1, 0 }, // HIGHPASS_3,
-	{ 1, -4, 6, -4, 1 }, // HIGHPASS_4,
-	{ 0, 1, -1, 0, 0 }, // BANDPASS_1,				// LP(1) then HP(1)
-	{ 0, 0, 1, -1, 0 }, // BANDPASS_1_LOWPASS_1,	// LP(2) then HP(1)
-	{ 0, 0, 0, 1, -1 }, // BANDPASS_1_LOWPASS_2,	// LP(3) then HP(1)
-	{ 0, 1, -2, 1, 0 }, // BANDPASS_1_HIGHPASS_1,	// LP(1) then HP(2)
-	{ 0, 1, -3, 3, -1 }, // BANDPASS_1_HIGHPASS_2,	// LP(1) then HP(3)
-	{ 0, 0, 1, -2, 1 }, // BANDPASS_2,				// LP(2) then HP(2)
-	{ 1, -2, 2, 0, 0 }, // NOTCH,					// HP(2) * LP(2)
-	{ 0, 1, -2, 2, 0 }, // NOTCH_LOWPASS_1,			// LP(1) then HP(2) * LP(2)
-	{ 0, 0, 1, -2, 2 }, // NOTCH_LOWPASS_2,			// LP(2) then HP(2) * LP(2)
-	{ 1, -3, 6, -4, 0 }, // PHASESHIFT,
-	{ 0, 1, -3, 6, -4 }, // PHASESHIFT_LOWPASS_1,
+	//y0 y1 y2 y3 y4 
+	{ 1, 0, 0, 0, 0 },		// PEAK,					// input with feedback term
+	{ 0, 1, 0, 0, 0 },		// LOWPASS_1,				// LP(1) = y[1]
+	{ 0, 0, 1, 0, 0 },		// LOWPASS_2,				// LP(2) = LP(1) * LP(1) = y[2]
+	{ 0, 0, 0, 1, 0 },		// LOWPASS_3,				// LP(3) = LP(2) * LP(1) = y[3]
+	{ 0, 0, 0, 0, 1 },		// LOWPASS_4,				// LP(4) = LP(3) * LP(1) = y[4]
+	{ 1, -1, 0, 0, 0 },		// HIGHPASS_1,				// HP(1) = y[0] - y[1]
+	{ 1, -2, 1, 0, 0 },		// HIGHPASS_2,				// HP(2) = HP(1) * HP(1)
+	{ 1, -3, 3, -1, 0 },	// HIGHPASS_3,				// HP(3) = HP(2) * HP(1)
+	{ 1, -4, 6, -4, 1 },	// HIGHPASS_4,				// HP(4) = HP(3) * HP(1)
+	{ 0, 2, -2, 0, 0 },		// BANDPASS_1,				// BP(1) = LP(1) * HP(1) * 2
+	{ 0, 0, 2, -2, 0 },		// BANDPASS_1_LOWPASS_1,	// BP(1) * LP(1)
+	{ 0, 0, 0, 2, -2 },		// BANDPASS_1_LOWPASS_2,	// BP(1) * LP(2)
+	{ 0, 2, -4, 2, 0 },		// BANDPASS_1_HIGHPASS_1,	// BP(1) * HP(1)
+	{ 0, 2, -6, 6, -2 },	// BANDPASS_1_HIGHPASS_2,	// BP(1) * HP(2)
+	{ 0, 0, 4, -8, 4 },		// BANDPASS_2,				// BP(2) = BP(1) * BP(1)
+	{ 1, -2, 2, 0, 0 },		// NOTCH_1,					// N(1) = HP(2) + LP(2)
+	{ 0, 1, -2, 2, 0 },		// NOTCH_1_LOWPASS_1,		// N(1) * LP(1)
+	{ 0, 0, 1, -2, 2 },		// NOTCH_1_LOWPASS_2,		// N(1) * LP(2)
+	{ 1, -3, 4, -2, 0 },	// NOTCH_1_HIGHPASS_1,		// N(1) * HP(1)
+	{ 1, -4, 7, -6, 2 },	// NOTCH_1_HIGHPASS_2,		// N(1) * HP(2)
+	{ 1, -4, 8, -8, 4 },	// NOTCH_2,					// N(2) = N(1) * N(1)
+	{ 1, -2, 0, 0, 0 },		// PHASESHIFT_1,			// PS(1) = HP(1) - LP(1)
+	{ 1, -4, 4, 0, 0 },		// PHASESHIFT_2,			// PS(2) = PS(1) * PS(1)
+	{ 1, -6, 12, -8, 0 },	// PHASESHIFT_3,			// PS(3) = PS(2) * PS(1)
+	{ 1, -8, 24, -32, 16 },	// PHASESHIFT_4,			// PS(4) = PS(3) * PS(1)
 };
 
 // filter state
