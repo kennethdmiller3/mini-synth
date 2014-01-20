@@ -26,11 +26,10 @@ float OscillatorSawtooth(OscillatorConfig const &config, OscillatorState &state,
 #if ANTIALIAS == ANTIALIAS_POLYBLEP
 	if (use_antialias)
 	{
-		float const w = Min(step * POLYBLEP_WIDTH, 1.0f);
+		float const w = Min(step * POLYBLEP_WIDTH, 0.5f);
 
-		// up edges before and after the current phase
-		float const up_before = float(FloorInt(state.phase));
-		float const up_after = up_before + 1;
+		// up edge nearest the current phase
+		float const up_nearest = float(RoundInt(state.phase));
 
 		if (config.sync_enable)
 		{
@@ -39,10 +38,8 @@ float OscillatorSawtooth(OscillatorConfig const &config, OscillatorState &state,
 			value += PolyBLEP(state.phase - up_before_zero, w);
 
 			// handle dscontinuity at integer phases
-			if (up_before > 0)
-				value += PolyBLEP(state.phase - up_before, w);
-			if (up_after <= config.sync_phase)
-				value += PolyBLEP(state.phase - up_after, w);
+			if (up_nearest > 0 && up_nearest <= config.sync_phase)
+				value += PolyBLEP(state.phase - up_nearest, w);
 
 			// handle discontituity at sync phase
 			float const sync_value = GetSawtoothValue(config.sync_phase);
@@ -54,8 +51,7 @@ float OscillatorSawtooth(OscillatorConfig const &config, OscillatorState &state,
 		}
 		else
 		{
-			value += PolyBLEP(state.phase - up_before, w);
-			value += PolyBLEP(state.phase - up_after, w);
+			value += PolyBLEP(state.phase - up_nearest, w);
 		}
 	}
 #endif
