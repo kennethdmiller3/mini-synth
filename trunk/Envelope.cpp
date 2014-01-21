@@ -46,9 +46,21 @@ void EnvelopeState::Gate(EnvelopeConfig const &config, bool on)
 
 	gate = on;
 	if (gate)
-		state = config.enable ? EnvelopeState::ATTACK : EnvelopeState::SUSTAIN;
+	{
+		if (config.enable && config.attack_time)
+			state = EnvelopeState::ATTACK;
+		else if (config.enable && config.decay_time)
+			state = EnvelopeState::DECAY, amplitude = 1;
+		else
+			state = EnvelopeState::SUSTAIN, amplitude = config.sustain_level;
+	}
 	else
-		state = config.enable ? EnvelopeState::RELEASE : EnvelopeState::OFF;
+	{
+		if (config.enable && config.release_time)
+			state = EnvelopeState::RELEASE;
+		else
+			state = EnvelopeState::OFF;
+	}
 }
 
 // update envelope generator
