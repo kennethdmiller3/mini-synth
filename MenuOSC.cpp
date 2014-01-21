@@ -25,7 +25,7 @@ namespace Menu
 				config.enable = sign > 0;
 				break;
 			case OSC_WAVETYPE:
-				config.wavetype = Wave((config.wavetype + WAVE_COUNT + sign) % WAVE_COUNT);
+				config.SetWaveType(Wave((config.wavetype + WAVE_COUNT + sign) % WAVE_COUNT));
 				for (int k = 0; k < VOICES; ++k)
 					osc_state[k][menu - MENU_OSC1].Reset();
 				break;
