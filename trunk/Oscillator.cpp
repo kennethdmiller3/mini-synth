@@ -29,7 +29,7 @@ float OscillatorState::Update(OscillatorConfig const &config, float const freque
 	if (!config.enable)
 		return 0.0f;
 
-	float const delta = config.frequency * frequency * step;
+	float const delta = config.frequency * config.adjust * frequency * step;
 
 	// compute oscillator value
 	float const value = Compute(config, delta);
@@ -43,7 +43,7 @@ float OscillatorState::Update(OscillatorConfig const &config, float const freque
 // compute the oscillator value
 float OscillatorState::Compute(OscillatorConfig const &config, float delta)
 {
-	return config.amplitude * wave_evaluate[config.wavetype](config, *this, delta);
+	return config.amplitude * config.evaluate(config, *this, delta);
 }
 
 // advance the oscillator phase
@@ -57,7 +57,7 @@ void OscillatorState::Advance(OscillatorConfig const &config, float delta)
 		phase -= advance * config.sync_phase;
 
 		// advance the wavetable index
-		int const cycle = wave_loop_cycle[config.wavetype];
+		int const cycle = config.cycle;
 		index += advance;
 		if (index >= cycle)
 			index -= cycle;
@@ -69,7 +69,7 @@ void OscillatorState::Advance(OscillatorConfig const &config, float delta)
 		phase -= advance * config.sync_phase;
 
 		// rewind the wavetable index
-		int const cycle = wave_loop_cycle[config.wavetype];
+		int const cycle = config.cycle;
 		index += advance;
 		if (index < 0)
 			index += cycle;

@@ -71,7 +71,7 @@ void UpdateOscillatorWaveformDisplay(HANDLE hOut, BASS_INFO const &info, int con
 	float const lfo = lfo_state.Update(lfo_config, 1.0f, 0.0f);
 
 	// how many cycles to plot?
-	int cycle = wave_loop_cycle[osc_config[0].wavetype];
+	int cycle = osc_config[0].cycle;
 	if (cycle == INT_MAX)
 	{
 		if (osc_config[0].sub_osc_mode == SUBOSC_NONE)
@@ -193,7 +193,7 @@ void UpdateOscillatorWaveformDisplay(HANDLE hOut, BASS_INFO const &info, int con
 	if (phase_offset >= 1.0f)
 	{
 		phase_offset -= 1.0f;
-		if (++index_offset >= wave_loop_cycle[config.wavetype])
+		if (++index_offset >= config.cycle;
 			index_offset = 0;
 	}
 	state.phase += phase_offset;

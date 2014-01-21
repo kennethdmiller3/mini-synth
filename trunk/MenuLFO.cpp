@@ -22,7 +22,7 @@ namespace Menu
 				lfo_config.enable = sign > 0;
 				break;
 			case LFO_WAVETYPE:
-				lfo_config.wavetype = Wave((lfo_config.wavetype + WAVE_COUNT + sign) % WAVE_COUNT);
+				lfo_config.SetWaveType(Wave((lfo_config.wavetype + WAVE_COUNT + sign) % WAVE_COUNT));
 				lfo_state.Reset();
 				break;
 			case LFO_WAVEPARAM:

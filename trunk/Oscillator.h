@@ -6,7 +6,7 @@ Copyright 2014 Kenneth D. Miller III
 Oscillator
 */
 
-enum Wave;
+#include "Wave.h"
 
 // base frequency oscillator configuration
 class OscillatorConfig
@@ -23,6 +23,11 @@ public:
 	bool sync_enable;
 	float sync_phase;
 
+	// derived values
+	WaveEvaluate evaluate;
+	size_t cycle;
+	float adjust;
+
 	OscillatorConfig(bool const enable, Wave const wavetype, float const waveparam, float const frequency, float const amplitude)
 		: enable(enable)
 		, wavetype(wavetype)
@@ -32,6 +37,15 @@ public:
 		, sync_enable(false)
 		, sync_phase(1.0f)
 	{
+		SetWaveType(wavetype);
+	}
+
+	void SetWaveType(Wave type)
+	{
+		wavetype = type;
+		evaluate = wave_evaluate[wavetype];
+		cycle = wave_loop_cycle[wavetype];
+		adjust = wave_adjust_frequency[wavetype];
 	}
 };
 

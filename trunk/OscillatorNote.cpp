@@ -24,7 +24,7 @@ void NoteOscillatorConfig::Modulate(float lfo)
 	waveparam = waveparam_base + waveparam_lfo * lfo;
 
 	// LFO frequency modulation
-	frequency = powf(2.0f, frequency_base + frequency_lfo * lfo) * wave_adjust_frequency[wavetype];
+	frequency = powf(2.0f, frequency_base + frequency_lfo * lfo);
 
 	// LFO amplitude modulation
 	amplitude = amplitude_base + amplitude_lfo * lfo;
