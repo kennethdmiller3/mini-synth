@@ -133,7 +133,7 @@ static float OscillatorPoly(OscillatorConfig const &config, OscillatorState &sta
 				t -= 1.0f;
 				char v1 = poly[i];
 				if (v0 != v1)
-					value += PolyBLEP(t, w, v1 - v0);
+					value += PolyBLEP(t, w, float(v1 - v0));
 				v0 = v1;
 			}
 		}
