@@ -47,7 +47,7 @@ char const title_text[] = ">>> MINI VIRTUAL ANALOG SYNTHESIZER";
 // output scale factor
 float output_scale = 0.25f;	// 0.25f;
 
-static int const LFO_UPDATE_SAMPLES = 16;
+static size_t const BLOCK_UPDATE_SAMPLES = 16;
 
 DWORD CALLBACK WriteStream(HSTREAM handle, short *buffer, DWORD length, void *user)
 {
@@ -82,21 +82,27 @@ DWORD CALLBACK WriteStream(HSTREAM handle, short *buffer, DWORD length, void *us
 		return length;
 	}
 
+	// flush denormals
+	unsigned int prev;
+	_controlfp_s(&prev, _DN_FLUSH, _MCW_DN);
+
 	// time step per output sample
 	float const step = 1.0f / info.freq;
 
+	// time step per output block
+	float const block_step = step * BLOCK_UPDATE_SAMPLES;
+
 	// low-frequency oscillator value
-	// (updated every LFO_UPDATE_SAMPLES)
+	// (updated every BLOCK_UPDATE_SAMPLES)
 	float lfo = 0;
-	float const lfo_step = step * LFO_UPDATE_SAMPLES;
 
 	// for each output sample...
 	for (size_t c = 0; c < count; ++c)
 	{
-		if ((c & (LFO_UPDATE_SAMPLES - 1)) == 0)
+		if ((c & (BLOCK_UPDATE_SAMPLES - 1)) == 0)
 		{
 			// get low-frequency oscillator value
-			lfo = lfo_state.Update(lfo_config, 1.0f, lfo_step);
+			lfo = lfo_state.Update(lfo_config, 1.0f, block_step);
 
 			// compute shared oscillator values
 			for (int o = 0; o < NUM_OSCILLATORS; ++o)
@@ -119,7 +125,7 @@ DWORD CALLBACK WriteStream(HSTREAM handle, short *buffer, DWORD length, void *us
 		for (int i = 0; i < active; ++i)
 		{
 			// get the voice index
-			int v = index[i];
+			int const v = index[i];
 
 			// update volume envelope generator
 			float const amp_env_amplitude = amp_env_state[v].Update(amp_env_config, step);
@@ -145,7 +151,7 @@ DWORD CALLBACK WriteStream(HSTREAM handle, short *buffer, DWORD length, void *us
 			float osc_value = 0.0f;
 			for (int o = 0; o < NUM_OSCILLATORS; ++o)
 			{
-				if (osc_config[o].sub_osc_mode)
+				if (osc_config[o].sub_osc_mode && osc_config[o].sub_osc_amplitude)
 					osc_value += osc_config[o].sub_osc_amplitude * SubOscillator(osc_config[o], osc_state[v][o], key_freq, step);
 				osc_value += osc_state[v][o].Update(osc_config[o], key_freq, step);
 			}
@@ -154,10 +160,10 @@ DWORD CALLBACK WriteStream(HSTREAM handle, short *buffer, DWORD length, void *us
 			float flt_value;
 			if (flt_config.enable)
 			{
-				if ((c & (LFO_UPDATE_SAMPLES - 1)) == 0)
+				if ((c & (BLOCK_UPDATE_SAMPLES - 1)) == 0)
 				{
 					// update filter envelope generator
-					float const flt_env_amplitude = flt_env_state[v].Update(flt_env_config, lfo_step);
+					float const flt_env_amplitude = flt_env_state[v].Update(flt_env_config, block_step);
 
 					// compute cutoff frequency
 					// (assume key follow)
@@ -186,6 +192,9 @@ DWORD CALLBACK WriteStream(HSTREAM handle, short *buffer, DWORD length, void *us
 		*buffer++ = output;
 		*buffer++ = output;
 	}
+
+	// restore denormal
+	_controlfp_s(&prev, prev, _MCW_DN);
 
 	return length;
 }
@@ -217,7 +226,7 @@ void PrintAntialias(HANDLE hOut)
 }
 
 
-void main(int argc, char **argv)
+void __cdecl main(int argc, char **argv)
 {
 	HANDLE hIn = GetStdHandle(STD_INPUT_HANDLE);
 	HANDLE hOut = GetStdHandle(STD_OUTPUT_HANDLE);
