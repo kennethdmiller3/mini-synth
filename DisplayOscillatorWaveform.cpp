@@ -68,7 +68,7 @@ void UpdateOscillatorWaveformDisplay(HANDLE hOut, BASS_INFO const &info, int con
 
 	// get low-frequency oscillator value
 	// (assume it is constant for the duration)
-	float const lfo = lfo_state.Update(lfo_config, 1.0f, 0.0f);
+	float const lfo = lfo_state.Compute(lfo_config, 0.0f);
 
 	// how many cycles to plot?
 	int cycle = osc_config[0].cycle;
@@ -94,12 +94,6 @@ void UpdateOscillatorWaveformDisplay(HANDLE hOut, BASS_INFO const &info, int con
 
 	// key velocity
 	float const key_vel = voice_vel[v] / 64.0f;
-
-	// update filter envelope generator
-	float const flt_env_amplitude = flt_env_state[v].amplitude;
-
-	// update volume envelope generator
-	float const amp_env_amplitude = amp_env_config.enable ? amp_env_state[v].amplitude : 1;
 
 	// base phase delta
 	float const delta_base = key_freq / info.freq;
@@ -135,14 +129,6 @@ void UpdateOscillatorWaveformDisplay(HANDLE hOut, BASS_INFO const &info, int con
 	static bool prev_active;
 	static int prev_v;
 
-	// compute cutoff frequency
-	// (assume key follow)
-	float const cutoff = flt_config.GetCutoff(lfo, flt_env_amplitude, key_vel);
-
-	// set up the filter
-	// (assume it is constant for the duration)
-	filter.Setup(cutoff, flt_config.resonance, step_base);
-
 	// elapsed time in milliseconds since the previous frame
 	static DWORD prevTime = timeGetTime();
 	DWORD deltaTime = timeGetTime() - prevTime;
@@ -156,13 +142,25 @@ void UpdateOscillatorWaveformDisplay(HANDLE hOut, BASS_INFO const &info, int con
 	}
 	if (prev_active != (amp_env_state[v].state != EnvelopeState::OFF))
 	{
-		filter.Reset();
+		if (!prev_active)
+			filter.Reset();
 		prev_active = (amp_env_state[v].state != EnvelopeState::OFF);
 	}
 
 	// if the filter is enabled...
 	if (flt_config.enable)
 	{
+		// get filter envelope generator amplitude
+		float const flt_env_amplitude = flt_env_state[v].amplitude;
+
+		// compute cutoff frequency
+		// (assume key follow)
+		float const cutoff = flt_config.GetCutoff(lfo, flt_env_amplitude, key_vel);
+
+		// set up the filter
+		// (assume it is constant for the duration)
+		filter.Setup(cutoff, flt_config.resonance, step_base);
+
 		// get steps needed to advance OSC1 by the time step
 		// (subtracting the steps that the plot itself will take)
 		int steps = FloorInt(key_freq * config[0].frequency * deltaTime / 1000 - 1) * WAVEFORM_WIDTH;
@@ -173,7 +171,9 @@ void UpdateOscillatorWaveformDisplay(HANDLE hOut, BASS_INFO const &info, int con
 			{
 				if (!config[o].enable)
 					continue;
-				state[o].Advance(config[o], step[config[o].sync_enable ? 0 : o] * steps);
+				if (config[o].sync_enable)
+					config[o].sync_phase = config[o].frequency / config[0].frequency;
+				state[o].Advance(config[o], -step[o] * steps);
 			}
 
 			// run the filter ahead for next time
@@ -199,6 +199,9 @@ void UpdateOscillatorWaveformDisplay(HANDLE hOut, BASS_INFO const &info, int con
 	state.phase += phase_offset;
 	state.index += index_offset;
 #endif
+
+	// get volume envelope generator amplitude
+	float const amp_env_amplitude = amp_env_config.enable ? amp_env_state[v].amplitude : 1;
 
 	for (int x = 0; x < WAVEFORM_WIDTH; ++x)
 	{
