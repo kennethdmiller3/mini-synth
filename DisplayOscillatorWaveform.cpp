@@ -68,7 +68,7 @@ void UpdateOscillatorWaveformDisplay(HANDLE hOut, BASS_INFO const &info, int con
 
 	// get low-frequency oscillator value
 	// (assume it is constant for the duration)
-	float const lfo = lfo_state.Compute(lfo_config, 0.0f);
+	float const lfo = lfo_state.Update(lfo_config, 1.0f, 0.0f);
 
 	// how many cycles to plot?
 	int cycle = osc_config[0].cycle;
