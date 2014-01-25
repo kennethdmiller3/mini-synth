@@ -24,12 +24,12 @@ void OscillatorState::Start()
 }
 
 // update oscillator
-float OscillatorState::Update(OscillatorConfig const &config, float const frequency, float const step)
+float OscillatorState::Update(OscillatorConfig const &config, float const step)
 {
 	if (!config.enable)
 		return 0.0f;
 
-	float const delta = config.frequency * config.adjust * frequency * step;
+	float const delta = config.frequency * config.adjust * step;
 
 	// compute oscillator value
 	float const value = Compute(config, delta);

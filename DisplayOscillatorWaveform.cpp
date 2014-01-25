@@ -43,7 +43,7 @@ static float UpdateWaveformStep(NoteOscillatorConfig config[], OscillatorState s
 		if (config[o].sync_enable)
 			config[o].sync_phase = config[o].frequency / config[0].frequency;
 		if (config[o].sub_osc_mode)
-			value += config[o].sub_osc_amplitude * SubOscillator(config[o], state[o], 1, delta[o]);
+			value += config[o].sub_osc_amplitude * SubOscillator(config[o], state[o], delta[o]);
 		value += state[o].Compute(config[o], delta[o]);
 		state[o].Advance(config[o], step[o]);
 	}
@@ -68,7 +68,7 @@ void UpdateOscillatorWaveformDisplay(HANDLE hOut, BASS_INFO const &info, int con
 
 	// get low-frequency oscillator value
 	// (assume it is constant for the duration)
-	float const lfo = lfo_state.Update(lfo_config, 1.0f, 0.0f);
+	float const lfo = lfo_state.Update(lfo_config, 0.0f);
 
 	// how many cycles to plot?
 	int cycle = osc_config[0].cycle;

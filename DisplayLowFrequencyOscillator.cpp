@@ -25,7 +25,7 @@ void UpdateLowFrequencyOscillatorDisplay(HANDLE hOut)
 		buf[x] = positive;
 
 	// plot low-frequency oscillator value
-	float const lfo = lfo_state.Update(lfo_config, 1.0f, 0.0f);
+	float const lfo = lfo_state.Update(lfo_config, 0.0f);
 	int grid_x = Clamp(FloorInt(18.0f * lfo + 18.0f), 0, 35);
 	buf[grid_x / 2].Char.UnicodeChar = plot[grid_x & 1];
 

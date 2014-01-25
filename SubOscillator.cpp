@@ -20,10 +20,10 @@ const char * const sub_osc_name[SUBOSC_COUNT] =
 };
 
 // sub-oscillator
-float SubOscillator(NoteOscillatorConfig const &config, OscillatorState const &state, float frequency, float step)
+float SubOscillator(NoteOscillatorConfig const &config, OscillatorState const &state, float step)
 {
 	float sub_value = (state.index & config.sub_osc_mode) ? -1.0f : 1.0f;
-	float const w = frequency * step * POLYBLEP_WIDTH;
+	float const w = step * POLYBLEP_WIDTH;
 	if (state.phase < 0.5f)
 	{
 		float sub_prev = ((state.index - 1) & config.sub_osc_mode) ? -1.0f : 1.0f;

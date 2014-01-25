@@ -23,4 +23,4 @@ enum SubOscillatorMode
 extern const char * const sub_osc_name[SUBOSC_COUNT];
 
 // compute sub-oscillator value
-extern float SubOscillator(NoteOscillatorConfig const &config, OscillatorState const &state, float frequency, float step);
+extern float SubOscillator(NoteOscillatorConfig const &config, OscillatorState const &state, float step);
