@@ -491,7 +491,7 @@ void __cdecl main(int argc, char **argv)
 		UpdateOscillatorWaveformDisplay(hOut, info, voice_most_recent);
 
 		// update the oscillator frequency displays
-		for (int o = 0; o < 2; ++o)
+		for (int o = 0; o < NUM_OSCILLATORS; ++o)
 		{
 			if (osc_config[o].enable)
 				UpdateOscillatorFrequencyDisplay(hOut, voice_most_recent, o);
