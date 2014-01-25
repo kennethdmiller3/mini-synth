@@ -71,7 +71,7 @@ DWORD CALLBACK WriteStream(HSTREAM handle, short *buffer, DWORD length, void *us
 		memset(buffer, 0, length);
 
 		// advance low-frequency oscillator
-		float lfo = lfo_state.Update(lfo_config, 1.0f, float(count) / info.freq);
+		float lfo = lfo_state.Update(lfo_config, float(count) / info.freq);
 
 		// compute shared oscillator values
 		for (int o = 0; o < NUM_OSCILLATORS; ++o)
@@ -102,7 +102,7 @@ DWORD CALLBACK WriteStream(HSTREAM handle, short *buffer, DWORD length, void *us
 		if ((c & (BLOCK_UPDATE_SAMPLES - 1)) == 0)
 		{
 			// get low-frequency oscillator value
-			lfo = lfo_state.Update(lfo_config, 1.0f, block_step);
+			lfo = lfo_state.Update(lfo_config, block_step);
 
 			// compute shared oscillator values
 			for (int o = 0; o < NUM_OSCILLATORS; ++o)
@@ -146,18 +146,20 @@ DWORD CALLBACK WriteStream(HSTREAM handle, short *buffer, DWORD length, void *us
 			// key velocity
 			float const key_vel = voice_vel[v] / 64.0f;
 
-			// update oscillator
+			// key frequency times step
+			float const key_step = key_freq * step;
+
+			// update oscillators
 			// (assume key follow)
 			float osc_value = 0.0f;
 			for (int o = 0; o < NUM_OSCILLATORS; ++o)
 			{
 				if (osc_config[o].sub_osc_mode && osc_config[o].sub_osc_amplitude)
-					osc_value += osc_config[o].sub_osc_amplitude * SubOscillator(osc_config[o], osc_state[v][o], key_freq, step);
-				osc_value += osc_state[v][o].Update(osc_config[o], key_freq, step);
+					osc_value += osc_config[o].sub_osc_amplitude * SubOscillator(osc_config[o], osc_state[v][o], key_step);
+				osc_value += osc_state[v][o].Update(osc_config[o], key_step);
 			}
 
 			// update filter
-			float flt_value;
 			if (flt_config.enable)
 			{
 				if ((c & (BLOCK_UPDATE_SAMPLES - 1)) == 0)
@@ -174,16 +176,11 @@ DWORD CALLBACK WriteStream(HSTREAM handle, short *buffer, DWORD length, void *us
 				}
 
 				// get filtered oscillator value
-				flt_value = flt_state[v].Update(flt_config, osc_value);
-			}
-			else
-			{
-				// pass unfiltered value
-				flt_value = osc_value;
+				osc_value = flt_state[v].Update(flt_config, osc_value);
 			}
 
 			// apply amplifier level and accumulate result
-			sample += flt_value * amp_config.GetLevel(amp_env_amplitude, key_vel);
+			sample += osc_value * amp_config.GetLevel(amp_env_amplitude, key_vel);
 		}
 
 		// left and right channels are the same

@@ -68,7 +68,7 @@ public:
 	void Start();
 
 	// update the oscillator by one step
-	float Update(OscillatorConfig const &config, float frequency, float const step);
+	float Update(OscillatorConfig const &config, float const step);
 
 	// compute the oscillator value
 	float Compute(OscillatorConfig const &config, float delta);
