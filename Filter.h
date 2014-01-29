@@ -10,8 +10,9 @@ Filter
 
 // filter type
 #define FILTER_IMPROVED_MOOG 0
-#define FILTER_NONLINEAR_MOOG 1
-#define FILTER 0
+#define FILTER_LINEAR_MOOG 1
+#define FILTER_NONLINEAR_MOOG 2
+#define FILTER FILTER_LINEAR_MOOG
 
 // resonant lowpass filter
 class FilterConfig
@@ -49,6 +50,7 @@ public:
 		COUNT
 	};
 	Mode mode;
+	float mix[5];
 
 	// resonance parameter
 	float resonance;
@@ -61,14 +63,17 @@ public:
 
 	FilterConfig(bool const enable, Mode const mode, float const resonance, float const cutoff_base, float const cutoff_lfo, float const cutoff_env, float const cutoff_env_vel)
 		: enable(enable)
-		, mode(mode)
 		, cutoff_base(cutoff_base)
 		, cutoff_lfo(cutoff_lfo)
 		, cutoff_env(cutoff_env)
 		, cutoff_env_vel(cutoff_env_vel)
 		, resonance(resonance)
 	{
+		SetMode(mode);
 	}
+
+	// set filter mode
+	void SetMode(Mode newmode);
 
 	// get the modulated cutoff value
 	float GetCutoff(float const lfo, float const env, float const vel)
@@ -89,15 +94,27 @@ public:
 #define FILTER_OVERSAMPLE 2
 
 	// output delayed by half a sample for phase compensation
+	float previous;
 	float delayed;
 
 	// tuning coefficient
 	float tune;
 
 	// nonlinear output values from each stage
-	float z[6];
+	float z[5];
 
-#else
+#elif FILTER == FILTER_LINEAR_MOOG
+
+#define FILTER_OVERSAMPLE 2
+
+	// output delayed by half a sample for phase compensation
+	float previous;
+	float delayed;
+
+	// tuning coefficient
+	float tune;
+
+#elif FILTER == FILTER_IMPROVED_MOOG
 
 #define FILTER_OVERSAMPLE 2
 

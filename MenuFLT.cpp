@@ -25,7 +25,7 @@ namespace Menu
 				flt_env_config.enable = sign > 0;
 				break;
 			case FLT_MODE:
-				flt_config.mode = FilterConfig::Mode((flt_config.mode + FilterConfig::COUNT + sign) % FilterConfig::COUNT);
+				flt_config.SetMode(FilterConfig::Mode((flt_config.mode + FilterConfig::COUNT + sign) % FilterConfig::COUNT));
 				break;
 			case FLT_RESONANCE:
 				UpdatePercentageProperty(flt_config.resonance, sign, modifiers, 0, 4);

@@ -161,14 +161,26 @@ FilterState flt_state[VOICES];
 void FilterState::Reset()
 {
 	feedback = 0.0f;
-#if FILTER == FILTER_NONLINEAR_MOOG
+#if FILTER == FILTER_IMPROVED_MOOOG
+	a1 = 0.0f; b0 = 0.0f; b1 = 0.0f;
+#elif FILTER == FILTER_LINEAR_MOOG
+	previous = 0.0f;
+	delayed = 0.0f;
+	tune = 0.0f;
+#elif FILTER == FILTER_NONLINEAR_MOOG
+	previous = 0.0f;
 	delayed = 0.0f;
 	tune = 0.0f;
 	memset(z, 0, sizeof(z));
-#else
-	a1 = 0.0f; b0 = 0.0f; b1 = 0.0f;
 #endif
 	memset(y, 0, sizeof(y));
+}
+
+// set filter mode
+void FilterConfig::SetMode(FilterConfig::Mode newmode)
+{
+	mode = newmode;
+	memcpy(mix, filter_mix[mode], sizeof(mix));
 }
 
 // compute filter values based on cutoff frequency and resonance
@@ -187,7 +199,18 @@ void FilterState::Setup(float const cutoff, float const resonance, float const s
 	feedback = 4.0f * resonance;
 	// y[n] = ((1.0 / 1.3) * x[n] + (0.3 / 1.3) * x[n-1] - y[n-1]) * g + y[n-1]
 	// y[n] = (g / 1.3) * x[n] + (g * 0.3 / 1.3) * x[n-1] - (g - 1) * y[n-1]
-	a1 = g - 1.0f; b0 = g * 0.769231f; b1 = b0 * 0.3f;
+	a1 = 1.0f - g; b0 = g * 0.769231f; b1 = b0 * 0.3f;
+
+#elif FILTER == FILTER_LINEAR_MOOG
+
+	// Linear version of Antti Huovilainen's digital implementation
+	// http://www.acoustics.ed.ac.uk/wp-content/uploads/AMT_MSc_FinalProjects/2012__Daly__AMT_MSc_FinalProject_MoogVCF.pdf
+
+	// this part is more expensive than the Improved Moog but the filter itself is cheaper
+	float const fcr = ((1.8730f * fc + 0.4955f) * fc + -0.6490f) * fc + 0.9988f;
+	float const acr = (-3.9364f * fc + 1.8409f) * fc + 0.9968f;
+	feedback = resonance * 4.0f * acr;
+	tune = 1.0f - expf(-M_PI * fc * fcr);
 
 #elif FILTER == FILTER_NONLINEAR_MOOG
 
@@ -213,7 +236,7 @@ float FilterState::Update(FilterConfig const &config, float const input)
 	for (int i = 0; i < FILTER_OVERSAMPLE; ++i)
 #endif
 	{
-		// feedback with nonlinear saturation
+		// nonlinear feedback with gain compensation
 		float const comp = 0.5f;
 		float const in = input - feedback * (FastTanh(y[4]) - comp * input);
 
@@ -237,32 +260,48 @@ float FilterState::Update(FilterConfig const &config, float const input)
 		// four-pole low-pass filter
 		float const t[4] = { y[0], y[1], y[2], y[3] };
 		y[0] = in;
-		y[1] = b0 * y[0] + b1 * t[0] - a1 * y[1];
-		y[2] = b0 * y[1] + b1 * t[1] - a1 * y[2];
-		y[3] = b0 * y[2] + b1 * t[2] - a1 * y[3];
-		y[4] = b0 * y[3] + b1 * t[3] - a1 * y[4];
+		y[1] = y[1] * a1 + y[0] * b0 + t[0] * b1;
+		y[2] = y[2] * a1 + y[1] * b0 + t[1] * b1;
+		y[3] = y[3] * a1 + y[2] * b0 + t[2] * b1;
+		y[4] = y[4] * a1 + y[3] * b0 + t[3] * b1;
 	}
 
-	// generate output by mixing stage values
-	float const *mix = filter_mix[config.mode];
-	return
-		y[0] * mix[0] +
-		y[1] * mix[1] +
-		y[2] * mix[2] +
-		y[3] * mix[3] +
-		y[4] * mix[4];
+#elif FILTER == FILTER_LINEAR_MOOG
+
+#if FILTER_OVERSAMPLE > 1
+	for (int i = 0; i < FILTER_OVERSAMPLE; ++i)
+#endif
+	{
+		// half-sample delay for phase compensation
+		delayed = 0.5f * (y[4] + previous);
+		previous = y[4];
+
+		// nonlinear feedback with gain compensation
+		float const comp = 0.5f;
+		y[0] = input - feedback * (FastTanh(delayed) - comp * input);
+
+		// four-pole low-pass filter
+		y[1] += tune * (y[0] - y[1]);
+		y[2] += tune * (y[1] - y[2]);
+		y[3] += tune * (y[2] - y[3]);
+		y[4] += tune * (y[3] - y[4]);
+	}
 
 #elif FILTER == FILTER_NONLINEAR_MOOG
 
 	// modified original algorithm based on sample code here:
 	// http://www.kvraudio.com/forum/viewtopic.php?p=3821632
-	float output;
 #if FILTER_OVERSAMPLE > 1
 	for (int i = 0; i < FILTER_OVERSAMPLE; ++i)
 #endif
 	{
-		// nonlinear feedback
-		y[0] = input - feedback * delayed;
+		// half-sample delay for phase compensation
+		delayed = 0.5f * (y[4] + previous);
+		previous = y[4];
+
+		// nonlinear feedback with gain compensation
+		float const comp = 0.5f;
+		y[0] = input - feedback * (delayed - comp * input);
 		z[0] = FastTanh(y[0] * 0.8192f);
 
 		// nonlinear four-pole low-pass filter
@@ -274,19 +313,15 @@ float FilterState::Update(FilterConfig const &config, float const input)
 		z[3] = FastTanh(y[3] * 0.8192f);
 		y[4] += tune * (z[3] - z[4]);
 		z[4] = FastTanh(y[4] * 0.8192f);
-
-		// half-sample delay for phase compensation
-		delayed = 0.5f * (z[4] + z[5]);
-		z[5] = z[4];
 	}
+
+#endif
 
 	// generate output by mixing stage values
 	return
-		z[0] * mix[0] +
-		z[1] * mix[1] +
-		z[2] * mix[2] +
-		z[3] * mix[3] +
-		z[4] * mix[4];
-
-#endif
-}
+		y[0] * config.mix[0] +
+		y[1] * config.mix[1] +
+		y[2] * config.mix[2] +
+		y[3] * config.mix[3] +
+		y[4] * config.mix[4];
+	}
