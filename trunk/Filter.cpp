@@ -11,6 +11,37 @@ Filter
 #include "Math.h"
 #include "Voice.h"
 
+// cubic saturation function
+float CubicSaturate(float const x)
+{
+	if (x >= 1.5f)
+		return 1;
+	if (x <= -1.5f)
+		return -1;
+	return x - 0.14814814814814814814814814814815f * x * x * x;
+}
+
+// filter saturation type
+#define SATURATE_FEEDBACK 0	// saturate feedback path
+#define SATURATE_INPUT 1	// saturate input after feedback
+// saturating input makes the filter work more like a hardware analog filter,
+// adding harmonics to higher-amplitude input signals for an "overdrive" effect
+#define SATURATE SATURATE_INPUT
+
+// saturation function to apply
+// (arranged from cheapest to costliest)
+//#define Saturate(x) (x)
+//#define Saturate(x) Clamp(x, -1.0f, 1.0f)
+//#define Saturate(x) CubicSaturate(x)
+#define Saturate(x) FastTanh(x)
+//#define Saturate(x) tanhf(x)
+
+// compensate for reduced gain at low frequencies as resonance increases
+// 0.0: no compensation, -12dB at low frequencies
+// 0.5: half compensation, -6dB at low frequencies
+// 1.0: full compensation, -0dB at low frequencies
+static float const GAIN_COMPENSATION = 0.5f;
+
 // filter configuration
 FilterConfig flt_config(false, FilterConfig::LOWPASS_4, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f);
 
@@ -161,7 +192,7 @@ FilterState flt_state[VOICES];
 void FilterState::Reset()
 {
 	feedback = 0.0f;
-#if FILTER == FILTER_IMPROVED_MOOOG
+#if FILTER == FILTER_IMPROVED_MOOG
 	a1 = 0.0f; b0 = 0.0f; b1 = 0.0f;
 #elif FILTER == FILTER_LINEAR_MOOG
 	previous = 0.0f;
@@ -171,6 +202,9 @@ void FilterState::Reset()
 	previous = 0.0f;
 	delayed = 0.0f;
 	tune = 0.0f;
+	memset(z, 0, sizeof(z));
+#elif FILTER == FILTER_TPT_MOOG
+	inv1g = 0; G = 0; alpha0 = 0;
 	memset(z, 0, sizeof(z));
 #endif
 	memset(y, 0, sizeof(y));
@@ -224,6 +258,23 @@ void FilterState::Setup(float const cutoff, float const resonance, float const s
 	feedback = resonance * 4.0f * acr;
 	tune = (1.0f - expf(-M_PI * fc * fcr)) * 1.22070313f;
 
+#elif FILTER == FILTER_TPT_MOOG
+
+	// Based on Will Pirkle's implementation of Vadim Zavalishin's
+	// Topology-Preserving Transform (TPT) virtual analog ladder filter
+	// http://www.native-instruments.com/fileadmin/ni_media/downloads/pdf/VAFilterDesign_1.0.3.pdf
+	// http://www.willpirkle.com/Downloads/AN-4VirtualAnalogFilters.2.0.pdf
+
+	feedback = resonance * 4.0f;
+	float const f = 0.5f*M_PI*fc;
+	//float const g = tanf(f);
+	// approximation of tangent http://www.musicdsp.org/showone.php?id=115
+	float const ff = f * f;
+	//float const g = f * (1 + ff * (0.3333314036f + ff * (0.1333923995f + ff * (0.0533740603f + ff * (0.0245650893f + ff * (0.002900525f + ff * 0.0095168091f))))));
+	float const g = f * (1 + ff * (0.31755f + ff * 0.2033f));
+	inv1g = 1 / (1 + g);
+	G = g * inv1g;
+	alpha0 = 1 / (1 + feedback * G * G * G * G);
 #endif
 }
 
@@ -237,8 +288,11 @@ float FilterState::Update(FilterConfig const &config, float const input)
 #endif
 	{
 		// nonlinear feedback with gain compensation
-		float const comp = 0.5f;
-		float const in = input - feedback * (FastTanh(y[4]) - comp * input);
+#if SATURATE == SATURATE_INPUT
+		float const in = Saturate(input - feedback * (y[4] - GAIN_COMPENSATION * input));
+#else
+		float const in = input - feedback * (Saturate(y[4]) - GAIN_COMPENSATION * input);
+#endif
 
 		// stage 1: x1[n-1] = x1[n]; x1[n] = in;    y1[n-1] = y1[n]; y1[n] = func(y1[n-1], x1[n], x1[n-1])
 		// stage 2: x2[n-1] = x2[n]; x2[n] = y1[n]; y2[n-1] = y2[n]; y2[n] = func(y2[n-1], x2[n], x2[n-1])
@@ -277,8 +331,11 @@ float FilterState::Update(FilterConfig const &config, float const input)
 		previous = y[4];
 
 		// nonlinear feedback with gain compensation
-		float const comp = 0.5f;
-		y[0] = input - feedback * (FastTanh(delayed) - comp * input);
+#if SATURATE == SATURATE_INPUT
+		y[0] = Saturate(input - feedback * (delayed - GAIN_COMPENSATION * input));
+##else
+		y[0] = input - feedback * (Saturate(delayed) - GAIN_COMPENSATION * input);
+#endif
 
 		// four-pole low-pass filter
 		y[1] += tune * (y[0] - y[1]);
@@ -300,8 +357,8 @@ float FilterState::Update(FilterConfig const &config, float const input)
 		previous = y[4];
 
 		// nonlinear feedback with gain compensation
-		float const comp = 0.5f;
-		y[0] = input - feedback * (delayed - comp * input);
+		float const GAIN_COMPENSATION = 0.5f;
+		y[0] = input - feedback * (delayed - GAIN_COMPENSATION * input);
 		z[0] = FastTanh(y[0] * 0.8192f);
 
 		// nonlinear four-pole low-pass filter
@@ -315,6 +372,31 @@ float FilterState::Update(FilterConfig const &config, float const input)
 		z[4] = FastTanh(y[4] * 0.8192f);
 	}
 
+#elif FILTER == FILTER_TPT_MOOG
+
+	// nonlinear feedback with gain compensation
+	float const S = (((z[0] * G + z[1]) * G + z[2]) * G + z[3]) * inv1g;
+#if SATURATE == SATURATE_INPUT
+	y[0] = Saturate(alpha0 * (input - feedback * (S - GAIN_COMPENSATION * input)));
+#else
+	y[0] = alpha0 * (input - feedback * (Saturate(S) - GAIN_COMPENSATION * input));
+#endif
+
+	// four-pole low-pass filter
+	register float v;
+	v = (y[0] - z[0]) * G;
+	y[1] = v + z[0];
+	z[0] = y[1] + v;
+	v = (y[1] - z[1]) * G;
+	y[2] = v + z[1];
+	z[1] = y[2] + v;
+	v = (y[2] - z[2]) * G;
+	y[3] = v + z[2];
+	z[2] = y[3] + v;
+	v = (y[3] - z[3]) * G;
+	y[4] = v + z[3];
+	z[3] = y[4] + v;
+
 #endif
 
 	// generate output by mixing stage values
@@ -324,4 +406,4 @@ float FilterState::Update(FilterConfig const &config, float const input)
 		y[2] * config.mix[2] +
 		y[3] * config.mix[3] +
 		y[4] * config.mix[4];
-	}
+}

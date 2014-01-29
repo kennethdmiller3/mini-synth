@@ -12,7 +12,8 @@ Filter
 #define FILTER_IMPROVED_MOOG 0
 #define FILTER_LINEAR_MOOG 1
 #define FILTER_NONLINEAR_MOOG 2
-#define FILTER FILTER_LINEAR_MOOG
+#define FILTER_TPT_MOOG 3
+#define FILTER 3
 
 // resonant lowpass filter
 class FilterConfig
@@ -128,6 +129,16 @@ public:
 	// y[n] + a1 * y[n - 1] = b0 * x[n] + b1 * x[n - 1]
 	// y[n] = b0 * x[n] + b1 * x[n-1] - a1 * y[n-1]
 	float b0, b1, a1;
+
+#elif FILTER == FILTER_TPT_MOOG
+
+#define FILTER_OVERSAMPLE 1
+
+	// parameters derived from cutoff and resonance
+	float inv1g, G, alpha0;
+
+	// delay element values
+	float z[4];
 
 #endif
 
