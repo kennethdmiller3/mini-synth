@@ -205,7 +205,7 @@ DWORD CALLBACK WriteStream(HSTREAM handle, short *buffer, DWORD length, void *us
 
 		// left and right channels are the same
 		//short output = (short)Clamp(int(sample * output_scale * 32768), SHRT_MIN, SHRT_MAX);
-		short output = (short)(FastTanh(sample * output_scale) * 32768);
+		short output = (short)(FastTanh(sample * output_scale) * 32767);
 		*buffer++ = output;
 		*buffer++ = output;
 	}
@@ -396,12 +396,12 @@ void __cdecl main(int argc, char **argv)
 					}
 					else if (code == VK_OEM_MINUS || code == VK_SUBTRACT)
 					{
-						output_scale -= 1.0f / 16.0f;
+						Menu::UpdatePercentageProperty(output_scale, -1, modifiers, 0, 4);
 						PrintOutputScale(hOut);
 					}
 					else if (code == VK_OEM_PLUS || code == VK_ADD)
 					{
-						output_scale += 1.0f / 16.0f;
+						Menu::UpdatePercentageProperty(output_scale, +1, modifiers, 0, 4);
 						PrintOutputScale(hOut);
 					}
 					else if (code == VK_OEM_4)	// '['
