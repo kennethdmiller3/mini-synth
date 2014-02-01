@@ -11,17 +11,23 @@ Polynomial Bandlimited Step
 // Polynomial correction for C0 (value) discontinuity
 
 // width of bandlimited step relative to the sample period
+// this value was determined through experimentation
+// 1 is not enough, allowing high harmonics to alias
+// 2 is too much, suppressing high harmonics below Nyquist
 const float POLYBLEP_WIDTH = 1.5f;
 
-// approximation of 0.5 * s * (sin((t * M_PI) / (w + w)) - sign(t))
+// the ideal bandlimited step is based on the sine integral
+// (which is the integral of the sinc function)
+// http://mathworld.wolfram.com/SineIntegral.html
+// http://en.wikipedia.org/wiki/Trigonometric_integral
+// 0.5 s (2 Si(pi t) / pi - sign(s)), where s is the step height
+// Si(pi t) = sum k=1..infinity -(-1)^k (pi t)^(2k-1) / ((2k-1)(2k-1)!)
 
-// cubic version:
-// (this doesn't seem to work as well as the quadratic version
-// +: (3t - t^3 - 2) * s * 0.25f
-// -: (3t - t^3 + 2) * s * 0.25f
-//	s *= 0.5f;
-//	float const p = (3 - t * t) * t * 0.5f * s;
-//	return t >= 0 ? p - s : p + s;
+// many PolyBLEP use this piecewise quadratic curve:
+//     2x - sign(x)(x^2)
+
+// it's simple, fast, and surprisingly effective...
+// (it suppress higher harmonics a bit too much, though)
 
 // general case for value step of s units
 inline float PolyBLEP(float t, float w, float s)
@@ -34,6 +40,31 @@ inline float PolyBLEP(float t, float w, float s)
 		tt1 = -tt1;
 	return (tt1 + t) * s;
 }
+
+#if 0
+// Hermite cubic spline approximation to the integral of a gaussian-windowed sinc
+//     exp(-k^2/16) sin(k) / k where k = pi * t
+//
+// This preserves high-frequency harmonics better than the quadratic "smooth step"
+// version but needs a wider sample window than the oscillators currently support
+inline float PolyBLEP(float t, float w)
+{
+	if (fabsf(t) >= w + w)
+		return 0.0f;
+	t /= w;
+	float const t2 = t * t;
+	float const t3 = t2 * t;
+	//float const t4 = t3 * t;
+	if (t < -w)
+		return 0.3333333f + t + 0.75f * t2 + 0.1666667f * t3;	//1.3333333f + 4 * t + 4 * t2 + 1.6666667f * t3 + 0.25f * t4;
+	else if (t < 0)
+		return 1 + 2 * t + 0.75f * t2 - 0.1666667f * t3;	//1 + t - 1.6666667f * t3 - 0.75f * t4;
+	else if (t < w)
+		return -1 + 2 * t - 0.75f * t2 - 0.1666667f * t3;	//-1 + t - 1.6666667f * t3 + 0.75f * t4;
+	else
+		return -0.3333333f + t - 0.75f * t2 + 0.1666667f * t3;	// -1.3333333f + 4 * t - 4 * t2 + 1.66666667f * t3 - 0.25f * t4;
+}
+#endif
 
 // special case for a value step of 2 units (pulse/sawtooth -1 to +1)
 inline float PolyBLEP(float t, float w)
