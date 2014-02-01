@@ -49,6 +49,23 @@ float output_scale = 0.25f;	// 0.25f;
 
 static size_t const BLOCK_UPDATE_SAMPLES = 16;
 
+// apply low-frequency oscillator value
+static void ApplyLFO(float lfo)
+{
+	// compute shared oscillator values
+	for (int o = 0; o < NUM_OSCILLATORS; ++o)
+	{
+		osc_config[o].Modulate(lfo);
+	}
+
+	// set up sync phases
+	for (int o = 1; o < NUM_OSCILLATORS; ++o)
+	{
+		if (osc_config[o].sync_enable)
+			osc_config[o].sync_phase = osc_config[o].frequency / osc_config[0].frequency;
+	}
+}
+
 DWORD CALLBACK WriteStream(HSTREAM handle, short *buffer, DWORD length, void *user)
 {
 	// get active voices
@@ -65,13 +82,18 @@ DWORD CALLBACK WriteStream(HSTREAM handle, short *buffer, DWORD length, void *us
 	// number of samples
 	size_t count = length / (2 * sizeof(short));
 
+	// low-frequency oscillator value
+	// (updated every BLOCK_UPDATE_SAMPLES)
+	float lfo = 0;
+
 	if (active == 0)
 	{
 		// clear buffer
 		memset(buffer, 0, length);
 
 		// advance low-frequency oscillator
-		float lfo = lfo_state.Update(lfo_config, float(count) / info.freq);
+		if (lfo_config.enable)
+			lfo = lfo_state.Update(lfo_config, float(count) / info.freq);
 
 		// compute shared oscillator values
 		for (int o = 0; o < NUM_OSCILLATORS; ++o)
@@ -92,29 +114,25 @@ DWORD CALLBACK WriteStream(HSTREAM handle, short *buffer, DWORD length, void *us
 	// time step per output block
 	float const block_step = step * BLOCK_UPDATE_SAMPLES;
 
-	// low-frequency oscillator value
-	// (updated every BLOCK_UPDATE_SAMPLES)
-	float lfo = 0;
+	// if the low-frequency oscillator is off...
+	if (!lfo_config.enable)
+	{
+		ApplyLFO(0);
+	}
 
 	// for each output sample...
 	for (size_t c = 0; c < count; ++c)
 	{
 		if ((c & (BLOCK_UPDATE_SAMPLES - 1)) == 0)
 		{
-			// get low-frequency oscillator value
-			lfo = lfo_state.Update(lfo_config, block_step);
-
-			// compute shared oscillator values
-			for (int o = 0; o < NUM_OSCILLATORS; ++o)
+			// apply low-frequency oscillator
+			if (lfo_config.enable)
 			{
-				osc_config[o].Modulate(lfo);
-			}
+				// get low-frequency oscillator value
+				lfo = lfo_state.Update(lfo_config, block_step);
 
-			// set up sync phases
-			for (int o = 1; o < NUM_OSCILLATORS; ++o)
-			{
-				if (osc_config[o].sync_enable)
-					osc_config[o].sync_phase = osc_config[o].frequency / osc_config[0].frequency;
+				// apply low-frequency oscillator
+				ApplyLFO(lfo);
 			}
 		}
 
@@ -154,6 +172,8 @@ DWORD CALLBACK WriteStream(HSTREAM handle, short *buffer, DWORD length, void *us
 			float osc_value = 0.0f;
 			for (int o = 0; o < NUM_OSCILLATORS; ++o)
 			{
+				if (!osc_config[o].enable)
+					continue;
 				if (osc_config[o].sub_osc_mode && osc_config[o].sub_osc_amplitude)
 					osc_value += osc_config[o].sub_osc_amplitude * SubOscillator(osc_config[o], osc_state[v][o], key_step);
 				osc_value += osc_state[v][o].Update(osc_config[o], key_step);
