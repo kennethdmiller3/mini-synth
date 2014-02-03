@@ -15,6 +15,7 @@ void OscillatorState::Reset()
 {
 	phase = 0.0f;
 	index = 0;
+	memset(f, 0, sizeof(f));
 }
 
 // start oscillator
@@ -26,9 +27,6 @@ void OscillatorState::Start()
 // update oscillator
 float OscillatorState::Update(OscillatorConfig const &config, float const step)
 {
-	if (!config.enable)
-		return 0.0f;
-
 	float const delta = config.frequency * config.adjust * step;
 
 	// compute oscillator value
@@ -50,6 +48,25 @@ float OscillatorState::Compute(OscillatorConfig const &config, float delta)
 void OscillatorState::Advance(OscillatorConfig const &config, float delta)
 {
 	phase += delta;
+#if 1
+	if (config.sync_enable)
+	{
+		if (phase >= config.sync_phase - index)
+		{
+			phase -= config.sync_phase - index;
+			index = 0;
+		}
+	}
+	else
+	{
+		int const advance = FloorInt(phase);
+		if (advance)
+		{
+			phase -= advance;
+			index += advance;
+		}
+	}
+#else
 	if (phase >= config.sync_phase)
 	{
 		// wrap phase around
@@ -74,4 +91,5 @@ void OscillatorState::Advance(OscillatorConfig const &config, float delta)
 		if (index < 0)
 			index += cycle;
 	}
+#endif
 }
