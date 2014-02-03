@@ -10,24 +10,26 @@ Effects Menu
 
 namespace Menu
 {
-	namespace FX
+#if 0
+	class FX : public Menu
 	{
 		enum Item
 		{
-			FX_TITLE,
-			FX_CHORUS,
-			FX_COMPRESSOR,
-			FX_DISTORTION,
-			FX_ECHO,
-			FX_FLANGER,
-			FX_GARGLE,
-			FX_I3DL2REVERB,
-			FX_PARAMEQ,
-			FX_REVERB,
-			FX_COUNT
+			TITLE,
+			CHORUS,
+			COMPRESSOR,
+			DISTORTION,
+			ECHO,
+			FLANGER,
+			GARGLE,
+			I3DL2REVERB,
+			PARAMEQ,
+			REVERB,
+			COUNT
 		};
 
-		extern void Update(MenuMode menu, int index, int sign, DWORD modifiers);
-		extern void Print(MenuMode menu, int index, HANDLE hOut, COORD pos, DWORD flags);
+		virtual void Update(int index, int sign, DWORD modifiers);
+		virtual void Print(int index, HANDLE hOut, COORD pos, DWORD flags);
 	}
+#endif
 }

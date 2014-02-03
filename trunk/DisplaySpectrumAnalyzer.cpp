@@ -11,6 +11,16 @@ Spectrum Analyzer Display
 
 #define FREQUENCY_BINS 4096
 
+// frequency constants
+static float const semitone = 1.0594630943592952645618252949463f;	//powf(2.0f, 1.0f / 12.0f);
+static float const quartertone = 0.97153194115360586874328941582127f;	//1/sqrtf(semitone)
+static float const freq_scale = FREQUENCY_BINS * 2.0f * quartertone;
+
+// position and size
+static COORD const pos = { 0, 0 };
+static COORD const size = { SPECTRUM_WIDTH, SPECTRUM_HEIGHT };
+
+// plotting characters
 static CHAR_INFO const bar_full = { 0, BACKGROUND_GREEN };
 static CHAR_INFO const bar_top = { 223, BACKGROUND_GREEN | FOREGROUND_RED | FOREGROUND_GREEN | FOREGROUND_BLUE };
 static CHAR_INFO const bar_bottom = { 220, BACKGROUND_BLUE | FOREGROUND_RED | FOREGROUND_GREEN | FOREGROUND_BLUE };
@@ -28,8 +38,7 @@ void UpdateSpectrumAnalyzer(HANDLE hOut, DWORD stream, BASS_INFO const &info, fl
 
 	// get the lower frequency bin for the zeroth semitone band
 	// (half a semitone down from the center frequency)
-	float const semitone = powf(2.0f, 1.0f / 12.0f);
-	float freq = freq_min * FREQUENCY_BINS * 2.0f / info.freq / sqrtf(semitone);
+	float freq = freq_scale * freq_min / info.freq;
 	int b0 = Max(RoundInt(freq), 0);
 
 	// get power in each semitone band
@@ -62,13 +71,11 @@ void UpdateSpectrumAnalyzer(HANDLE hOut, DWORD stream, BASS_INFO const &info, fl
 	}
 
 	// inaudible band
-	int xinaudible = RoundInt(logf(20000 / freq_min) * 12 / logf(2));
+	int xinaudible = RoundInt(log2f(20000 / freq_min) * 12);
 
 	// plot log-log spectrum
 	// each grid cell is one semitone wide and 6 dB high
 	CHAR_INFO buf[SPECTRUM_HEIGHT][SPECTRUM_WIDTH];
-	COORD const pos = { 0, 0 };
-	COORD const size = { SPECTRUM_WIDTH, SPECTRUM_HEIGHT };
 	SMALL_RECT region = { 0, 0, 79, 49 };
 	float threshold = 1.0f;
 	for (int y = 0; y < SPECTRUM_HEIGHT; ++y)

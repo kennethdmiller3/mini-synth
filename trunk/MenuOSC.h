@@ -10,25 +10,38 @@ Note Oscillator Menu
 
 namespace Menu
 {
-	namespace OSC
+	class OSC : public Menu
 	{
+	public:
 		enum Item
 		{
-			OSC_TITLE,
-			OSC_WAVETYPE,
-			OSC_WAVEPARAM_BASE,
-			OSC_FREQUENCY_BASE,
-			OSC_AMPLITUDE_BASE,
-			OSC_WAVEPARAM_LFO,
-			OSC_FREQUENCY_LFO,
-			OSC_AMPLITUDE_LFO,
-			OSC_SUB_OSC_MODE,
-			OSC_SUB_OSC_AMPLITUDE,
-			OSC_HARD_SYNC,
-			OSC_COUNT
+			TITLE,
+			WAVETYPE,
+			WAVEPARAM_BASE,
+			FREQUENCY_BASE,
+			AMPLITUDE_BASE,
+			WAVEPARAM_LFO,
+			FREQUENCY_LFO,
+			AMPLITUDE_LFO,
+			SUB_OSC_MODE,
+			SUB_OSC_AMPLITUDE,
+			HARD_SYNC,
+			COUNT
 		};
 
-		extern void Update(MenuMode menu, int index, int sign, DWORD modifiers);
-		extern void Print(MenuMode menu, int index, HANDLE hOut, COORD pos, DWORD flags);
-	}
+		int osc;	// oscillator index
+
+		// constructor
+		OSC(int osc, COORD pos, const char *name, int count)
+			: Menu(pos, name, count)
+			, osc(osc)
+		{
+		}
+
+	protected:
+		virtual void Update(int index, int sign, DWORD modifiers);
+		virtual void Print(int index, HANDLE hOut, COORD pos, DWORD flags);
+	};
+
+	extern OSC menu_osc[];
 }

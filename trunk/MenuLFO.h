@@ -10,18 +10,28 @@ Low-Frequency Oscillator Menu
 
 namespace Menu
 {
-	namespace LFO
+	class LFO : public Menu
 	{
+	public:
 		enum Item
 		{
-			LFO_TITLE,
-			LFO_WAVETYPE,
-			LFO_WAVEPARAM,
-			LFO_FREQUENCY,
-			LFO_COUNT
+			TITLE,
+			WAVETYPE,
+			WAVEPARAM,
+			FREQUENCY,
+			COUNT
 		};
 
-		extern void Update(MenuMode menu, int index, int sign, DWORD modifiers);
-		extern void Print(MenuMode menu, int index, HANDLE hOut, COORD pos, DWORD flags);
-	}
+		// constructor
+		LFO(COORD pos, const char *name, int count)
+			: Menu(pos, name, count)
+		{
+		}
+
+	protected:
+		virtual void Update(int index, int sign, DWORD modifiers);
+		virtual void Print(int index, HANDLE hOut, COORD pos, DWORD flags);
+	};
+
+	extern LFO menu_lfo;
 }

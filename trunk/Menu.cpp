@@ -7,42 +7,55 @@ Menu Functions
 #include "StdAfx.h"
 #include "Math.h"
 #include "Console.h"
+#include "OscillatorNote.h"
 #include "Menu.h"
 #include "MenuOSC.h"
 #include "MenuLFO.h"
 #include "MenuFLT.h"
 #include "MenuAMP.h"
-#include "MenuFX.h"
+#include "MenuChorus.h"
+#include "MenuCompressor.h"
+#include "MenuDistortion.h"
+#include "MenuEcho.h"
+#include "MenuFlanger.h"
+#include "MenuGargle.h"
+#include "MenuReverbI3D.h"
+#include "MenuReverb.h"
 
 namespace Menu
 {
-	// selected menu
-	MenuMode active = MENU_OSC1;
-
-	// selected item in each menu
-	int item[MENU_COUNT];
-
-	// menu names
-	char const * const name[MENU_COUNT] =
+	static Menu * const menu_main[] =
 	{
-		"OSC1",
-		"OSC2",
-		"LFO",
-		"FLT",
-		"AMP",
-		"FX",
+		&menu_osc[0],
+		&menu_osc[1],
+		&menu_lfo,
+		&menu_flt,
+		&menu_amp,
+	};
+	static Menu * const menu_fx[] =
+	{
+		&menu_fx_chorus,
+		&menu_fx_compressor,
+		&menu_fx_distortion,
+		&menu_fx_echo,
+		&menu_fx_flanger,
+		&menu_fx_gargle,
+		&menu_fx_reverb3d,
+		&menu_fx_reverb,
 	};
 
-	// position of each menu
-	COORD const pos[MENU_COUNT] =
+	PageInfo const page_info[] =
 	{
-		{ 1, 12 },	// MENU_OSC1,
-		{ 21, 12 },	// MENU_OSC2,
-		{ 41, 12 },	// MENU_LFO,
-		{ 41, 18 },	// MENU_FLT,
-		{ 61, 10 },	// MENU_AMP,
-		{ 61, 18 },	// MENU_FX,
+		{ menu_main, ARRAY_SIZE(menu_main) },
+		{ menu_fx, ARRAY_SIZE(menu_fx) },
 	};
+
+	// active page
+	Page active_page = PAGE_MAIN;
+
+	// active menu
+	int active_menu = MAIN_OSC1;
+
 	// menu attributes
 	WORD const title_attrib[2][3] =
 	{
@@ -66,67 +79,95 @@ namespace Menu
 		FOREGROUND_RED | FOREGROUND_GREEN | FOREGROUND_INTENSITY | BACKGROUND_BLUE,
 	};
 
-	// set the active menu
-	void SetActive(HANDLE hOut, MenuMode menu)
+	void UpdateProperty(float &property, int const sign, DWORD const modifiers, float const scale, float const step[], float const minimum, float const maximum)
 	{
-		MenuMode prev_active = active;
-		active = MENU_COUNT;
-		Handler(hOut, 0, 0, prev_active);
-		active = menu;
-		Handler(hOut, 0, 0, active);
+		float value = roundf(property * scale);
+		if (modifiers & (LEFT_ALT_PRESSED | RIGHT_ALT_PRESSED))
+			value += sign * step[0];	// tiny step
+		else if (modifiers & (LEFT_CTRL_PRESSED | RIGHT_CTRL_PRESSED))
+			value += sign * step[1];	// small step
+		else if (!(modifiers & (SHIFT_PRESSED)))
+			value += sign * step[2];	// normal step
+		else
+			value += sign * step[3];	// large step
+		property = Clamp(value / scale, minimum, maximum);
+	}
+	
+	void UpdateProperty(int &property, int const sign, DWORD const modifiers, int const scale, int const step[], int const minimum, int const maximum)
+	{
+		int value = property * scale;
+		if (modifiers & (LEFT_ALT_PRESSED | RIGHT_ALT_PRESSED))
+			value += sign * step[0];	// tiny step
+		else if (modifiers & (LEFT_CTRL_PRESSED | RIGHT_CTRL_PRESSED))
+			value += sign * step[1];	// small step
+		else if (!(modifiers & (SHIFT_PRESSED)))
+			value += sign * step[2];	// normal step
+		else
+			value += sign * step[3];	// large step
+		property = Clamp(value / scale, minimum, maximum);
 	}
 
 	// update a logarthmic-frequency property
-	void UpdateFrequencyProperty(float &property, int const sign, DWORD const modifiers, float const minimum, float const maximum)
-	{
-		float value = roundf(property * 1200.0f);
-		if (modifiers & (LEFT_ALT_PRESSED | RIGHT_ALT_PRESSED))
-			value += sign * 1;		// tiny step: 1 cent
-		else if (modifiers & (LEFT_CTRL_PRESSED | RIGHT_CTRL_PRESSED))
-			value += sign * 10;		// small step: 10 cents
-		else if (!(modifiers & (SHIFT_PRESSED)))
-			value += sign * 100;	// normal step: 1 semitone
-		else
-			value += sign * 1200;	// large step: 1 octave
-		property = Clamp(value / 1200.0f, minimum, maximum);
-	}
+	float const pitch_step[] = { 1, 10, 100, 1200 };
 
 	// update a linear percentage property
-	void UpdatePercentageProperty(float &property, int const sign, DWORD const modifiers, float const minimum, float const maximum)
-	{
-		float value = roundf(property * 256.0f);
-		if (modifiers & (LEFT_ALT_PRESSED | RIGHT_ALT_PRESSED))
-			value += sign * 1;	// tiny step: 1/256
-		else if (modifiers & (LEFT_CTRL_PRESSED | RIGHT_CTRL_PRESSED))
-			value += sign * 4;	// small step: 4/256
-		else if (!(modifiers & (SHIFT_PRESSED)))
-			value += sign * 16;	// normal step: 16/256
-		else
-			value += sign * 64;	// large step: 64/256
-		property = Clamp(value / 256.0f, minimum, maximum);
-	}
+	float const percent_step[] = { 1, 4, 16, 64 };
 
 	// update a linear time property
-	void UpdateTimeProperty(float &property, int const sign, DWORD const modifiers, float const minimum, float const maximum)
+	float const time_step[] = { 1, 10, 100, 1000 };
+
+	// set the active page
+	void SetActivePage(HANDLE hOut, Page page)
 	{
-		float value = roundf(property * 1000.0f);
-		if (modifiers & (LEFT_ALT_PRESSED | RIGHT_ALT_PRESSED))
-			value += sign * 1;		// tiny step: 1ms
-		else if (modifiers & (LEFT_CTRL_PRESSED | RIGHT_CTRL_PRESSED))
-			value += sign * 10;		// small step: 10ms
-		else if (!(modifiers & (SHIFT_PRESSED)))
-			value += sign * 100;	// normal step: 100ms
-		else
-			value += sign * 1000;	// large step: 1s
-		property = Clamp(value / 1000.0f, minimum, maximum);
+		// clear the area
+		static DWORD const size = (49 - 12) * 80;
+		static COORD const pos = { 0, 12 };
+		DWORD written;
+		FillConsoleOutputCharacter(hOut, 0, size, pos, &written);
+		FillConsoleOutputAttribute(hOut, FOREGROUND_RED | FOREGROUND_GREEN | FOREGROUND_BLUE, size, pos, &written);
+
+		active_page = page;
+		for (int i = 0; i < page_info[page].count; ++i)
+			page_info[page].menu[i]->Print(hOut);
 	}
 
-	// print a menu title
-	void PrintMenuTitle(MenuMode menu, HANDLE hOut, COORD pos, bool enable, DWORD flags, char const *on_text, char const *off_text)
+	// set the active menu
+	void SetActiveMenu(HANDLE hOut, int menu)
+	{
+		if (menu >= 0 && menu < page_info[active_page].count)
+		{
+			int active_prev = active_menu;
+			active_menu = -1;
+			page_info[active_page].menu[active_prev]->Print(hOut);
+			active_menu = menu;
+			page_info[active_page].menu[active_menu]->Print(hOut);
+		}
+	}
+
+	// switch to the next menu
+	void NextMenu(HANDLE hOut)
+	{
+		SetActiveMenu(hOut, active_menu < page_info[active_page].count - 1 ? active_menu + 1 : 0);
+	}
+
+	// switch to the previous menu
+	void PrevMenu(HANDLE hOut)
+	{
+		SetActiveMenu(hOut, active_menu > 0 ? active_menu - 1 : page_info[active_page].count - 1);
+	}
+
+	// menu input handler
+	void Handler(HANDLE hOut, WORD key, DWORD modifiers)
+	{
+		page_info[active_page].menu[active_menu]->Handler(hOut, key, modifiers);
+	}
+
+	// print menu title bar
+	void Menu::PrintTitle(HANDLE hOut, bool enable, DWORD flags, char const *on_text, char const *off_text)
 	{
 		// print menu name
 		WORD const attrib = title_attrib[enable][flags];
-		PrintConsoleWithAttribute(hOut, pos, attrib, "F%d %-15s", menu + 1, name[menu]);
+		PrintConsoleWithAttribute(hOut, pos, attrib, "%-15s", name);
 
 		// print component enabled
 		if (char const *text = enable ? on_text : off_text)
@@ -136,105 +177,107 @@ namespace Menu
 		}
 	}
 
-	// print marker
-	void PrintMarker(HANDLE hOut, MenuMode menu, int item, CHAR_INFO left, CHAR_INFO right)
+	// print menu item
+	void PrintItemFloat(HANDLE hOut, COORD pos, DWORD flags, char const *format, float value)
 	{
-		COORD const zero = { 0, 0 };
-		COORD const size = { 1, 1 };
+		WORD const attrib = item_attrib[flags];
+		PrintConsoleWithAttribute(hOut, pos, attrib, format, value);
+	}
+	void PrintItemString(HANDLE hOut, COORD pos, DWORD flags, char const *format, char const *value)
+	{
+		WORD const attrib = item_attrib[flags];
+		PrintConsoleWithAttribute(hOut, pos, attrib, format, value);
+	}
+	void PrintItemBool(HANDLE hOut, COORD pos, DWORD flags, char const *format, bool value)
+	{
+		WORD const attrib = item_attrib[flags];
+		PrintConsoleWithAttribute(hOut, pos, attrib, format);
+		WORD const value_attrib = (attrib & 0xF8) | (value ? FOREGROUND_GREEN : FOREGROUND_RED);
+		char const *value_text = value ? " ON" : "OFF";
+		PrintConsoleWithAttribute(hOut, { pos.X + 15, pos.Y }, value_attrib, value_text);
+	}
+
+	// print marker
+	static void PrintMarker(HANDLE hOut, COORD pos, CHAR_INFO left, CHAR_INFO right)
+	{
+		static COORD const zero = { 0, 0 };
+		static COORD const size = { 1, 1 };
 		SMALL_RECT region;
 
-		region.Left = region.Right = pos[menu].X - 1;
-		region.Top = region.Bottom = pos[menu].Y + SHORT(item);
+		region.Left = region.Right = pos.X - 1;
+		region.Top = region.Bottom = pos.Y;
 		WriteConsoleOutput(hOut, &left, size, zero, &region);
-		region.Left = region.Right = pos[menu].X + 18;
+		region.Left = region.Right = pos.X + 18;
 		WriteConsoleOutput(hOut, &right, size, zero, &region);
 	}
 
 	// marker data
-	CHAR_INFO const marker_left = { 0x10, FOREGROUND_RED | FOREGROUND_GREEN | FOREGROUND_INTENSITY };
-	CHAR_INFO const marker_right = { 0x11, FOREGROUND_RED | FOREGROUND_GREEN | FOREGROUND_INTENSITY };
-	CHAR_INFO const marker_blank = { 0, FOREGROUND_RED | FOREGROUND_GREEN | FOREGROUND_BLUE };
+	static CHAR_INFO const marker_left = { 0x10, FOREGROUND_RED | FOREGROUND_GREEN | FOREGROUND_INTENSITY };
+	static CHAR_INFO const marker_right = { 0x11, FOREGROUND_RED | FOREGROUND_GREEN | FOREGROUND_INTENSITY };
+	static CHAR_INFO const marker_blank = { 0, FOREGROUND_RED | FOREGROUND_GREEN | FOREGROUND_BLUE };
 
 	// show selection marker on an item
-	inline void ShowMarker(HANDLE hOut, MenuMode menu, int item)
+	static inline void ShowMarker(HANDLE hOut, COORD pos)
 	{
-		PrintMarker(hOut, menu, item, marker_left, marker_right);
+		PrintMarker(hOut, pos, marker_left, marker_right);
 	}
 
 	// hide selection marker on an item
-	inline void HideMarker(HANDLE hOut, MenuMode menu, int item)
+	static inline void HideMarker(HANDLE hOut, COORD pos)
 	{
-		PrintMarker(hOut, menu, item, marker_blank, marker_blank);
+		PrintMarker(hOut, pos, marker_blank, marker_blank);
 	}
 
-	// 
-	struct Data
+	// print the whole menu
+	void Menu::Print(HANDLE hOut)
 	{
-		void(*Update)(MenuMode menu, int index, int sign, DWORD modifiers);
-		void(*Print)(MenuMode menu, int index, HANDLE hOut, COORD pos, DWORD flags);
-		int count;
-	};
-	Data const data[MENU_COUNT] =
-	{
-		{ Menu::OSC::Update, Menu::OSC::Print, Menu::OSC::OSC_COUNT - 1 },
-		{ Menu::OSC::Update, Menu::OSC::Print, Menu::OSC::OSC_COUNT },
-		{ Menu::LFO::Update, Menu::LFO::Print, Menu::LFO::LFO_COUNT },
-		{ Menu::FLT::Update, Menu::FLT::Print, Menu::FLT::FLT_COUNT },
-		{ Menu::AMP::Update, Menu::AMP::Print, Menu::AMP::AMP_COUNT },
-		{ Menu::FX::Update, Menu::FX::Print, Menu::FX::FX_COUNT },
-	};
+		COORD p = pos;
+		p.Y += SHORT(item);
+
+		int flags[2];
+		if (active_menu >= 0 && this == page_info[active_page].menu[active_menu])
+		{
+			ShowMarker(hOut, p);
+			flags[0] = 1; flags[1] = 2;
+		}
+		else
+		{
+			HideMarker(hOut, p);
+			flags[0] = 0; flags[1] = 0;
+		}
+
+		for (int i = 0; i < count; ++i)
+		{
+			Print(i, hOut, p, flags[item == i]);
+			++p.Y;
+		}
+	}
 
 	// general menu handler
-	void Handler(HANDLE hOut, WORD key, DWORD modifiers, MenuMode menu)
+	void Menu::Handler(HANDLE hOut, WORD key, DWORD modifiers)
 	{
-		int &item = Menu::item[menu];
-		COORD const &pos = Menu::pos[menu];
-		Menu::Data const &data = Menu::data[menu];
-		int const count = data.count;
-
+		int sign;
+		COORD p = pos;
 		switch (key)
 		{
-		case 0:
-			if (active == menu)
-			{
-				ShowMarker(hOut, menu, item);
-				for (int i = 0; i < count; ++i)
-					data.Print(menu, i, hOut, { pos.X, pos.Y + SHORT(i) }, item == i ? 2 : 1);
-			}
-			else
-			{
-				HideMarker(hOut, menu, item);
-				for (int i = 0; i < count; ++i)
-					data.Print(menu, i, hOut, { pos.X, pos.Y + SHORT(i) }, 0);
-			}
-			break;
-
 		case VK_UP:
-			HideMarker(hOut, menu, item);
-			data.Print(menu, item, hOut, { pos.X, pos.Y + SHORT(item) }, 1);
-			if (--item < 0)
-				item = count - 1;
-			data.Print(menu, item, hOut, { pos.X, pos.Y + SHORT(item) }, 2);
-			ShowMarker(hOut, menu, item);
-			break;
-
 		case VK_DOWN:
-			HideMarker(hOut, menu, item);
-			data.Print(menu, item, hOut, { pos.X, pos.Y + SHORT(item) }, 1);
-			if (++item >= count)
-				item = 0;
-			data.Print(menu, item, hOut, { pos.X, pos.Y + SHORT(item) }, 2);
-			ShowMarker(hOut, menu, item);
+			sign = key == VK_DOWN ? 1 : -1;
+			p.Y = pos.Y + SHORT(item);
+			HideMarker(hOut, p);
+			Print(item, hOut, p, 1);
+			item = (item + count + sign) % count;
+			p.Y = pos.Y + SHORT(item);
+			Print(item, hOut, p, 2);
+			ShowMarker(hOut, p);
 			break;
 
 		case VK_LEFT:
-			data.Update(menu, item, -1, modifiers);
-			data.Print(menu, item, hOut, { pos.X, pos.Y + SHORT(item) }, 2);
-			break;
-
 		case VK_RIGHT:
-			data.Update(menu, item, +1, modifiers);
-			data.Print(menu, item, hOut, { pos.X, pos.Y + SHORT(item) }, 2);
+			sign = key == VK_RIGHT ? 1 : -1;
+			Update(item, sign, modifiers);
+			p.Y = pos.Y + SHORT(item);
+			Print(item, hOut, p, 2);
 			break;
 		}
 	}

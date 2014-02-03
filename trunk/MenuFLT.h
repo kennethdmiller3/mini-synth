@@ -10,25 +10,35 @@ Filter Menu
 
 namespace Menu
 {
-	namespace FLT
+	class FLT : public Menu
 	{
+	public:
 		enum Item
 		{
-			FLT_TITLE,
-			FLT_MODE,
-			FLT_RESONANCE,
-			FLT_CUTOFF_BASE,
-			FLT_CUTOFF_LFO,
-			FLT_CUTOFF_ENV,
-			FLT_CUTOFF_ENV_VEL,
-			FLT_ENV_ATTACK,
-			FLT_ENV_DECAY,
-			FLT_ENV_SUSTAIN,
-			FLT_ENV_RELEASE,
-			FLT_COUNT
+			TITLE,
+			MODE,
+			RESONANCE,
+			CUTOFF_BASE,
+			CUTOFF_LFO,
+			CUTOFF_ENV,
+			CUTOFF_ENV_VEL,
+			ENV_ATTACK,
+			ENV_DECAY,
+			ENV_SUSTAIN,
+			ENV_RELEASE,
+			COUNT
 		};
 
-		extern void Update(MenuMode menu, int index, int sign, DWORD modifiers);
-		extern void Print(MenuMode menu, int index, HANDLE hOut, COORD pos, DWORD flags);
-	}
+		// constructor
+		FLT(COORD pos, const char *name, int count)
+			: Menu(pos, name, count)
+		{
+		}
+
+	protected:
+		virtual void Update(int index, int sign, DWORD modifiers);
+		virtual void Print(int index, HANDLE hOut, COORD pos, DWORD flags);
+	};
+
+	extern FLT menu_flt;
 }
