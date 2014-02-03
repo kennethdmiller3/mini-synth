@@ -37,12 +37,12 @@ int PrintConsoleWithAttribute(HANDLE out, COORD pos, WORD attrib, char const *fo
 void Clear(HANDLE hOut)
 {
 	CONSOLE_SCREEN_BUFFER_INFO bufInfo;
-	COORD osc_phase = { 0, 0 };
+	static COORD const zero = { 0, 0 };
 	DWORD written;
 	DWORD size;
 	GetConsoleScreenBufferInfo(hOut, &bufInfo);
 	size = bufInfo.dwSize.X * bufInfo.dwSize.Y;
-	FillConsoleOutputCharacter(hOut, (TCHAR)' ', size, osc_phase, &written);
-	FillConsoleOutputAttribute(hOut, FOREGROUND_RED | FOREGROUND_GREEN | FOREGROUND_BLUE, size, osc_phase, &written);
-	SetConsoleCursorPosition(hOut, osc_phase);
+	FillConsoleOutputCharacter(hOut, 0, size, zero, &written);
+	FillConsoleOutputAttribute(hOut, FOREGROUND_RED | FOREGROUND_GREEN | FOREGROUND_BLUE, size, zero, &written);
+	SetConsoleCursorPosition(hOut, zero);
 }

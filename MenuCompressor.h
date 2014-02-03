@@ -1,32 +1,26 @@
 #pragma once
-/*
-MINI VIRTUAL ANALOG SYNTHESIZER
-Copyright 2014 Kenneth D. Miller III
-
-Amplifier Menu
-*/
 
 #include "Menu.h"
 
 namespace Menu
 {
-	class AMP : public Menu
+	class Compressor : public Menu
 	{
 	public:
 		enum Item
 		{
 			TITLE,
-			LEVEL_ENV,
-			LEVEL_ENV_VEL,
-			ENV_ATTACK,
-			ENV_DECAY,
-			ENV_SUSTAIN,
-			ENV_RELEASE,
+			GAIN,
+			ATTACK,
+			RELEASE,
+			THRESHOLD,
+			RATIO,
+			PREDELAY,
 			COUNT
 		};
 
 		// constructor
-		AMP(COORD pos, const char *name, int count)
+		Compressor(COORD pos, const char *name, int count)
 			: Menu(pos, name, count)
 		{
 		}
@@ -36,5 +30,5 @@ namespace Menu
 		virtual void Print(int index, HANDLE hOut, COORD pos, DWORD flags);
 	};
 
-	extern AMP menu_amp;
+	extern Compressor menu_fx_compressor;
 }

@@ -445,20 +445,28 @@ void __cdecl main(int argc, char **argv)
 						use_antialias = !use_antialias;
 						PrintAntialias(hOut);
 					}
-					else if (code >= VK_F1 && code < VK_F1 + Menu::MENU_COUNT - (info.dsver < 8))
+					else if (code >= VK_F1 && code < VK_F10)
 					{
-						Menu::SetActive(hOut, Menu::MenuMode(code - VK_F1));
+						Menu::SetActiveMenu(hOut, code - VK_F1);
+					}
+					else if (code == VK_F10)
+					{
+						Menu::SetActivePage(hOut, Menu::PAGE_MAIN);
+					}
+					else if (code == VK_F11)
+					{
+						Menu::SetActivePage(hOut, Menu::PAGE_FX);
 					}
 					else if (code == VK_TAB)
 					{
 						if (modifiers & SHIFT_PRESSED)
-							Menu::SetActive(hOut, Menu::active > 0 ? Menu::MenuMode(Menu::active - 1) : Menu::MenuMode(Menu::MENU_COUNT - (info.dsver < 8) - 1));
+							Menu::PrevMenu(hOut);
 						else
-							Menu::SetActive(hOut, Menu::active < Menu::MENU_COUNT - (info.dsver < 8) - 1 ? Menu::MenuMode(Menu::active + 1) : Menu::MenuMode(0));
+							Menu::NextMenu(hOut);
 					}
 					else if (code == VK_UP || code == VK_DOWN || code == VK_RIGHT || code == VK_LEFT)
 					{
-						Menu::Handler(hOut, code, modifiers, Menu::active);
+						Menu::Handler(hOut, code, modifiers);
 					}
 				}
 
@@ -504,18 +512,21 @@ void __cdecl main(int argc, char **argv)
 		// update note key volume envelope display
 		UpdateKeyVolumeEnvelopeDisplay(hOut);
 
-		// update the oscillator waveform display
-		UpdateOscillatorWaveformDisplay(hOut, info, voice_most_recent);
-
-		// update the oscillator frequency displays
-		for (int o = 0; o < NUM_OSCILLATORS; ++o)
+		if (Menu::active_page == Menu::PAGE_MAIN)
 		{
-			if (osc_config[o].enable)
-				UpdateOscillatorFrequencyDisplay(hOut, voice_most_recent, o);
-		}
+			// update the oscillator waveform display
+			UpdateOscillatorWaveformDisplay(hOut, info, voice_most_recent);
 
-		// update the low-frequency oscillator dispaly
-		UpdateLowFrequencyOscillatorDisplay(hOut);
+			// update the oscillator frequency displays
+			for (int o = 0; o < NUM_OSCILLATORS; ++o)
+			{
+				if (osc_config[o].enable)
+					UpdateOscillatorFrequencyDisplay(hOut, voice_most_recent, o);
+			}
+
+			// update the low-frequency oscillator dispaly
+			UpdateLowFrequencyOscillatorDisplay(hOut);
+		}
 
 		// show CPU usage
 		PrintConsole(hOut, { 73, 49 }, "%6.2f%%", BASS_GetCPU());

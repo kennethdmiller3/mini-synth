@@ -13,100 +13,99 @@ Note Oscillator Menu
 
 namespace Menu
 {
-	// oscillator menus
-	namespace OSC
+	OSC menu_osc[NUM_OSCILLATORS] =
 	{
-		void Update(MenuMode menu, int index, int sign, DWORD modifiers)
-		{
-			NoteOscillatorConfig &config = osc_config[menu - MENU_OSC1];
-			switch (index)
-			{
-			case OSC_TITLE:
-				config.enable = sign > 0;
-				break;
-			case OSC_WAVETYPE:
-				config.SetWaveType(Wave((config.wavetype + WAVE_COUNT + sign) % WAVE_COUNT));
-				for (int k = 0; k < VOICES; ++k)
-					osc_state[k][menu - MENU_OSC1].Reset();
-				break;
-			case OSC_WAVEPARAM_BASE:
-				UpdatePercentageProperty(config.waveparam_base, sign, modifiers, 0, 1);
-				break;
-			case OSC_FREQUENCY_BASE:
-				UpdateFrequencyProperty(config.frequency_base, sign, modifiers, -5, 5);
-				break;
-			case OSC_AMPLITUDE_BASE:
-				UpdatePercentageProperty(config.amplitude_base, sign, modifiers, -10, 10);
-				break;
-			case OSC_WAVEPARAM_LFO:
-				UpdatePercentageProperty(config.waveparam_lfo, sign, modifiers, -10, 10);
-				break;
-			case OSC_FREQUENCY_LFO:
-				UpdateFrequencyProperty(config.frequency_lfo, sign, modifiers, -5, 5);
-				break;
-			case OSC_AMPLITUDE_LFO:
-				UpdatePercentageProperty(config.amplitude_lfo, sign, modifiers, -10, 10);
-				break;
-			case OSC_SUB_OSC_MODE:
-				config.sub_osc_mode = SubOscillatorMode((config.sub_osc_mode + sign + SUBOSC_COUNT) % SUBOSC_COUNT);
-				break;
-			case OSC_SUB_OSC_AMPLITUDE:
-				UpdatePercentageProperty(config.sub_osc_amplitude, sign, modifiers, -10, 10);
-				break;
-			case OSC_HARD_SYNC:
-				config.sync_enable = sign > 0;
-				config.sync_phase = 1.0f;
-				break;
-			default:
-				__assume(0);
-			}
-		}
+		OSC(0, { 1, 12 }, "F1 OSC1", OSC::COUNT - 1),
+		OSC(1, { 21, 12 }, "F2 OSC2", OSC::COUNT),
+	};
 
-		void Print(MenuMode menu, int index, HANDLE hOut, COORD pos, DWORD flags)
+	// oscillator menus
+	void OSC::Update(int index, int sign, DWORD modifiers)
+	{
+		NoteOscillatorConfig &config = osc_config[osc];
+		switch (index)
 		{
-			NoteOscillatorConfig &config = osc_config[menu - MENU_OSC1];
-			switch (index)
-			{
-			case OSC_TITLE:
-				PrintMenuTitle(menu, hOut, pos, config.enable, flags, NULL, "OFF");
-				break;
-			case OSC_WAVETYPE:
-				PrintConsoleWithAttribute(hOut, pos, item_attrib[flags], "%-18s", wave_name[config.wavetype]);
-				break;
-			case OSC_WAVEPARAM_BASE:
-				PrintConsoleWithAttribute(hOut, pos, item_attrib[flags], "Width:     % 6.1f%%", config.waveparam_base * 100.0f);
-				break;
-			case OSC_FREQUENCY_BASE:
-				PrintConsoleWithAttribute(hOut, pos, item_attrib[flags], "Frequency: %+7.2f", config.frequency_base * 12.0f);
-				break;
-			case OSC_AMPLITUDE_BASE:
-				PrintConsoleWithAttribute(hOut, pos, item_attrib[flags], "Amplitude:% 7.1f%%", config.amplitude_base * 100.0f);
-				break;
-			case OSC_WAVEPARAM_LFO:
-				PrintConsoleWithAttribute(hOut, pos, item_attrib[flags], "Width LFO: %+6.1f%%", config.waveparam_lfo * 100.0f);
-				break;
-			case OSC_FREQUENCY_LFO:
-				PrintConsoleWithAttribute(hOut, pos, item_attrib[flags], "Freq LFO:  %+7.2f", config.frequency_lfo * 12.0f);
-				break;
-			case OSC_AMPLITUDE_LFO:
-				PrintConsoleWithAttribute(hOut, pos, item_attrib[flags], "Ampl LFO: %+7.1f%%", config.amplitude_lfo * 100.0f);
-				break;
-			case OSC_SUB_OSC_MODE:
-				PrintConsoleWithAttribute(hOut, pos, item_attrib[flags], "Sub Osc:%10s", sub_osc_name[config.sub_osc_mode]);
-				break;
-			case OSC_SUB_OSC_AMPLITUDE:
-				PrintConsoleWithAttribute(hOut, pos, item_attrib[flags], "Sub Ampl: % 7.1f%%", config.sub_osc_amplitude * 100.0f);
-				break;
-			case OSC_HARD_SYNC:
-				PrintConsoleWithAttribute(hOut, pos, item_attrib[flags], "Hard Sync:     ");
-				if (config.sync_enable)
-					PrintConsoleWithAttribute(hOut, { pos.X + 15, pos.Y }, (item_attrib[flags] & 0xF8) | FOREGROUND_GREEN, " ON");
-				else
-					PrintConsoleWithAttribute(hOut, { pos.X + 15, pos.Y }, (item_attrib[flags] & 0xF8) | FOREGROUND_RED, "OFF");
-				break;
-			default:
-				__assume(0);
-			}
+		case TITLE:
+			config.enable = sign > 0;
+			break;
+		case WAVETYPE:
+			config.SetWaveType(Wave((config.wavetype + WAVE_COUNT + sign) % WAVE_COUNT));
+			for (int k = 0; k < VOICES; ++k)
+				osc_state[k][osc].Reset();
+			break;
+		case WAVEPARAM_BASE:
+			UpdatePercentageProperty(config.waveparam_base, sign, modifiers, 0, 1);
+			break;
+		case FREQUENCY_BASE:
+			UpdatePitchProperty(config.frequency_base, sign, modifiers, -5, 5);
+			break;
+		case AMPLITUDE_BASE:
+			UpdatePercentageProperty(config.amplitude_base, sign, modifiers, -10, 10);
+			break;
+		case WAVEPARAM_LFO:
+			UpdatePercentageProperty(config.waveparam_lfo, sign, modifiers, -10, 10);
+			break;
+		case FREQUENCY_LFO:
+			UpdatePitchProperty(config.frequency_lfo, sign, modifiers, -5, 5);
+			break;
+		case AMPLITUDE_LFO:
+			UpdatePercentageProperty(config.amplitude_lfo, sign, modifiers, -10, 10);
+			break;
+		case SUB_OSC_MODE:
+			config.sub_osc_mode = SubOscillatorMode((config.sub_osc_mode + sign + SUBOSC_COUNT) % SUBOSC_COUNT);
+			break;
+		case SUB_OSC_AMPLITUDE:
+			UpdatePercentageProperty(config.sub_osc_amplitude, sign, modifiers, -10, 10);
+			break;
+		case HARD_SYNC:
+			config.sync_enable = sign > 0;
+			config.sync_phase = 1.0f;
+			break;
+		default:
+			__assume(0);
+		}
+	}
+
+	void OSC::Print(int index, HANDLE hOut, COORD pos, DWORD flags)
+	{
+		NoteOscillatorConfig &config = osc_config[osc];
+		switch (index)
+		{
+		case TITLE:
+			PrintTitle(hOut, config.enable, flags, NULL, "OFF");
+			break;
+		case WAVETYPE:
+			PrintItemString(hOut, pos, flags, "%-18s", wave_name[config.wavetype]);
+			break;
+		case WAVEPARAM_BASE:
+			PrintItemFloat(hOut, pos, flags, "Width:     % 6.1f%%", config.waveparam_base * 100.0f);
+			break;
+		case FREQUENCY_BASE:
+			PrintItemFloat(hOut, pos, flags, "Frequency: %+7.2f", config.frequency_base * 12.0f);
+			break;
+		case AMPLITUDE_BASE:
+			PrintItemFloat(hOut, pos, flags, "Amplitude:% 7.1f%%", config.amplitude_base * 100.0f);
+			break;
+		case WAVEPARAM_LFO:
+			PrintItemFloat(hOut, pos, flags, "Width LFO: %+6.1f%%", config.waveparam_lfo * 100.0f);
+			break;
+		case FREQUENCY_LFO:
+			PrintItemFloat(hOut, pos, flags, "Freq LFO:  %+7.2f", config.frequency_lfo * 12.0f);
+			break;
+		case AMPLITUDE_LFO:
+			PrintItemFloat(hOut, pos, flags, "Ampl LFO: %+7.1f%%", config.amplitude_lfo * 100.0f);
+			break;
+		case SUB_OSC_MODE:
+			PrintItemString(hOut, pos, flags, "Sub Osc:%10s", sub_osc_name[config.sub_osc_mode]);
+			break;
+		case SUB_OSC_AMPLITUDE:
+			PrintItemFloat(hOut, pos, flags, "Sub Ampl: % 7.1f%%", config.sub_osc_amplitude * 100.0f);
+			break;
+		case HARD_SYNC:
+			PrintItemBool(hOut, pos, flags, "Hard Sync:     ", config.sync_enable);
+			break;
+		default:
+			__assume(0);
 		}
 	}
 }

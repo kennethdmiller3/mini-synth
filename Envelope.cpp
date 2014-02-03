@@ -21,12 +21,12 @@ static float const ENV_DECAY_BIAS = 1.0f - 1.0f / (1.0f - expf(-ENV_DECAY_CONSTA
 EnvelopeConfig::EnvelopeConfig(bool const enable, float const attack_time, float const decay_time, float const sustain_level, float const release_time)
 : enable(enable)
 , attack_time(attack_time)
-, attack_rate(1 / Max(attack_time, 0.0001f))
+, attack_rate(1 / (attack_time + FLT_MIN))
 , decay_time(decay_time)
-, decay_rate(1 / Max(decay_time, 0.0001f))
+, decay_rate(1 / (decay_time + FLT_MIN))
 , sustain_level(sustain_level)
 , release_time(release_time)
-, release_rate(1 / Max(release_time, 0.0001f))
+, release_rate(1 / (release_time + FLT_MIN))
 {
 }
 

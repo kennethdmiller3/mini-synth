@@ -8,6 +8,7 @@ Oscillator Frequency Display
 
 #include "DisplayOscillatorFrequency.h"
 #include "Menu.h"
+#include "MenuOSC.h"
 #include "Voice.h"
 #include "Control.h"
 #include "Console.h"
@@ -20,10 +21,9 @@ void UpdateOscillatorFrequencyDisplay(HANDLE hOut, int const v, int const o)
 	float const key_freq = Control::pitch_scale * note_frequency[voice_note[v]];
 
 	// get attributes to use
-	Menu::MenuMode menu = Menu::MenuMode(Menu::MENU_OSC1 + o);
-	COORD const pos = { Menu::pos[menu].X + 8, Menu::pos[menu].Y };
-	bool const selected = (Menu::active == menu);
-	bool const title_selected = selected && Menu::item[menu] == 0;
+	COORD const pos = { Menu::menu_osc[o].pos.X + 8, Menu::menu_osc[o].pos.Y };
+	bool const selected = (Menu::active_page == Menu::PAGE_MAIN && Menu::active_menu == Menu::MAIN_OSC1 + o);
+	bool const title_selected = selected && Menu::menu_osc[o].item == 0;
 	WORD const title_attrib = Menu::title_attrib[true][selected + title_selected];
 	WORD const num_attrib = (title_attrib & 0xF8) | (FOREGROUND_GREEN);
 	WORD const unit_attrib = (title_attrib & 0xF8) | (FOREGROUND_RED | FOREGROUND_GREEN | FOREGROUND_BLUE);
