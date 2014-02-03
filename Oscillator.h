@@ -56,6 +56,13 @@ public:
 	float phase;
 	int index;
 
+	// state values usable by wave functions
+	union
+	{
+		float f[8];
+		int i[8];
+	};
+
 	OscillatorState()
 	{
 		Reset();
