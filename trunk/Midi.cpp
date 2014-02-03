@@ -10,6 +10,7 @@ MIDI Support
 #include "Midi.h"
 #include "Voice.h"
 #include "Control.h"
+#include "Amplifier.h"
 
 // midi messages
 // http://www.midi.org/techspecs/midimessages.php
@@ -46,6 +47,10 @@ namespace Midi
 	namespace Input
 	{
 		HMIDIIN handle;
+		MIDIHDR header;
+		CHAR sysexbuffer[256];
+		bool sysexreceive;
+		bool stopping;
 
 		void HandleData(DWORD_PTR dwInstance, DWORD_PTR dwParam1, DWORD_PTR dwParam2)
 		{
@@ -85,6 +90,12 @@ namespace Midi
 					break;
 				case MIDI_ALL_SOUND_OFF:
 					DebugPrint("All Sound Off\n");
+					for (int v = 0; v < VOICES; ++v)
+					{
+						NoteOff(voice_note[v], 0);
+						amp_env_state[v].amplitude = 0;
+						amp_env_state[v].state = EnvelopeState::OFF;
+					}
 					break;
 				case MIDI_RESET_ALL_CONTROLLERS:
 					DebugPrint("Reset All Controllers\n");
@@ -128,6 +139,33 @@ namespace Midi
 			}
 		}
 
+		void HandleLongData(DWORD_PTR dwInstance, DWORD_PTR dwParam1, DWORD_PTR dwParam2)
+		{
+			DebugPrint("MIDI Input Long Data: %08x %08x\n", dwParam1, dwParam2);
+			if (!stopping)
+			{
+				LPMIDIHDR header = LPMIDIHDR(dwParam1);
+				LPSTR data = header->lpData;
+
+				// if this is the first block of sysex data...
+				if (!sysexreceive)
+				{
+					DebugPrint("MIDI System Exclusive\n");
+					sysexreceive = true;
+				}
+
+				// if this is the last block of sysex data...
+				if (data[header->dwBytesRecorded - 1] == 0xF7)
+				{
+					// end of block
+					sysexreceive = false;
+				}
+
+				// queue the header for more input
+				midiInAddBuffer(handle, header, sizeof(MIDIHDR));
+			}
+		}
+
 		void CALLBACK Proc(HMIDIIN hMidiIn, UINT wMsg, DWORD_PTR dwInstance, DWORD_PTR dwParam1, DWORD_PTR dwParam2)
 		{
 			switch (wMsg)
@@ -142,7 +180,7 @@ namespace Midi
 				HandleData(dwInstance, dwParam1, dwParam2);
 				break;
 			case MM_MIM_LONGDATA:
-				DebugPrint("MIDI Input Long Data: %08x %08x\n", dwParam1, dwParam2);
+				HandleLongData(dwInstance, dwParam1, dwParam2);
 				break;
 			case MM_MIM_ERROR:
 				DebugPrint("MIDI Input Error: %08x %08x\n", dwParam1, dwParam2);
@@ -173,7 +211,32 @@ namespace Midi
 				char buf[256];
 				GetLastErrorMessage(buf, 256);
 				DebugPrint("Error opening MIDI input: %s", buf);
+				return mmResult;
 			}
+
+			// prepare input buffer
+			header.lpData = sysexbuffer;
+			header.dwBufferLength = sizeof(sysexbuffer);
+			header.dwFlags = 0;
+			mmResult = midiInPrepareHeader(handle, &header, sizeof(MIDIHDR));
+			if (mmResult)
+			{
+				char buf[256];
+				GetLastErrorMessage(buf, 256);
+				DebugPrint("Error preparing MIDI header: %s", buf);
+				return mmResult;
+			}
+
+			// queue input buffer
+			mmResult = midiInAddBuffer(handle, &header, sizeof(MIDIHDR));
+			if (mmResult)
+			{
+				char buf[256];
+				GetLastErrorMessage(buf, 256);
+				DebugPrint("Error adding MIDI input buffer: %s", buf);
+				return mmResult;
+			}
+
 			return mmResult;
 		}
 
@@ -183,6 +246,7 @@ namespace Midi
 			{
 				// start midi input
 				midiInStart(handle);
+				stopping = false;
 			}
 		}
 
@@ -191,6 +255,7 @@ namespace Midi
 			if (handle)
 			{
 				// stop midi input
+				stopping = true;
 				midiInStop(handle);
 			}
 		}
@@ -199,6 +264,7 @@ namespace Midi
 		{
 			if (handle)
 			{
+				midiInUnprepareHeader(handle, &header, sizeof(MIDIHDR));
 				midiInClose(handle);
 			}
 		}
