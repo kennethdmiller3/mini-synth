@@ -66,7 +66,7 @@ static void ApplyLFO(float lfo)
 	}
 }
 
-DWORD CALLBACK WriteStream(HSTREAM handle, short *buffer, DWORD length, void *user)
+DWORD CALLBACK WriteStream(HSTREAM handle, float *buffer, DWORD length, void *user)
 {
 	// get active voices
 	int index[VOICES];
@@ -80,7 +80,7 @@ DWORD CALLBACK WriteStream(HSTREAM handle, short *buffer, DWORD length, void *us
 	}
 
 	// number of samples
-	size_t count = length / (2 * sizeof(short));
+	size_t count = length / (2 * sizeof(buffer[0]));
 
 	// low-frequency oscillator value
 	// (updated every BLOCK_UPDATE_SAMPLES)
@@ -204,8 +204,9 @@ DWORD CALLBACK WriteStream(HSTREAM handle, short *buffer, DWORD length, void *us
 		}
 
 		// left and right channels are the same
-		//short output = (short)Clamp(int(sample * output_scale * 32768), SHRT_MIN, SHRT_MAX);
-		short output = (short)(FastTanh(sample * output_scale) * 32767);
+		//short const output = short(Clamp(int(sample * output_scale * 32768), SHRT_MIN, SHRT_MAX));
+		//short const output = short(FastTanh(sample * output_scale) * 32767);
+		float const output = FastTanh(sample * output_scale);
 		*buffer++ = output;
 		*buffer++ = output;
 	}
@@ -309,7 +310,7 @@ void __cdecl main(int argc, char **argv)
 	if (!info.freq) info.freq = 44100;
 
 	// create a stream, stereo so that effects sound nice
-	stream = BASS_StreamCreate(info.freq, 2, 0, (STREAMPROC*)WriteStream, 0);
+	stream = BASS_StreamCreate(info.freq, 2, BASS_SAMPLE_FLOAT, (STREAMPROC*)WriteStream, 0);
 
 	// set channel to apply effects
 	fx_channel = stream;
