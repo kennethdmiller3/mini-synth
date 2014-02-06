@@ -59,7 +59,7 @@ void EnvelopeState::Gate(EnvelopeConfig const &config, bool on)
 		if (config.enable && config.release_time)
 			state = EnvelopeState::RELEASE;
 		else
-			state = EnvelopeState::OFF;
+			state = EnvelopeState::OFF, amplitude = 0;
 	}
 }
 
