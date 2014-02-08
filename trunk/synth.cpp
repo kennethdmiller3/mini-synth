@@ -330,23 +330,11 @@ void __cdecl main(int argc, char **argv)
 		//note_frequency[n] = powF(2.0F, (n - 60) / 12.0f) * 256.0f;	// middle C = 256Hz
 	}
 
-	// initialize key display
-	InitKeyVolumeEnvelopeDisplay(hOut);
-
-	// show output scale and key octave
-	PrintOutputScale(hOut);
-	PrintKeyOctave(hOut);
-	PrintAntialias(hOut);
-
 	// enable the first oscillator
 	osc_config[0].enable = true;
 
 	// reset all controllers
 	Control::ResetAll();
-
-	// show all menus
-	for (int i = 0; i < Menu::MENU_COUNT - (info.dsver < 8); ++i)
-		Menu::Handler(hOut, 0, 0, Menu::MenuMode(i));
 
 	// start playing the audio stream
 	BASS_ChannelPlay(stream, FALSE);
@@ -373,6 +361,21 @@ void __cdecl main(int argc, char **argv)
 		Midi::Input::Open(0);
 		Midi::Input::Start();
 	}
+
+	// initialize to middle c
+	note_most_recent = 60;
+	voice_note[voice_most_recent] = note_most_recent;
+
+	// initialize key display
+	InitKeyVolumeEnvelopeDisplay(hOut);
+
+	// show output scale and key octave
+	PrintOutputScale(hOut);
+	PrintKeyOctave(hOut);
+	PrintAntialias(hOut);
+
+	// show main page
+	Menu::SetActivePage(hOut, Menu::PAGE_MAIN);
 
 	while (running)
 	{
