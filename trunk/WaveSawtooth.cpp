@@ -16,42 +16,49 @@ Sawtooth Wave
 // - smoothed transition to reduce aliasing
 static __forceinline float GetSawtoothValue(float const phase)
 {
-	return 1.0f - 2.0f * (phase - FloorInt(phase));
+	return 1 - phase - phase;
 }
 float OscillatorSawtooth(OscillatorConfig const &config, OscillatorState &state, float step)
 {
 	if (step > 0.5f)
 		return 0.0f;
-	float value = GetSawtoothValue(state.phase);
+	float phase = state.phase;
+	float value = GetSawtoothValue(phase);
+
 #if ANTIALIAS == ANTIALIAS_POLYBLEP
 	if (use_antialias)
 	{
 		float const w = Min(step * POLYBLEP_WIDTH, 0.5f);
 
 		// up edge nearest the current phase
-		float const up_nearest = float(RoundInt(state.phase));
+		float up_nearest = float(phase >= 0.5f);
 
 		if (config.sync_enable)
 		{
-			// handle last integer phase before sync from the previous wave cycle
-			float up_before_zero = float(FloorInt(config.sync_phase)) - config.sync_phase;
-			value += PolyBLEP(state.phase - up_before_zero, w);
+			int const index = state.index;
+			phase += index;
+			up_nearest += index;
+			float const sync_fraction = config.sync_phase - float(FloorInt(config.sync_phase));
 
-			// handle dscontinuity at integer phases
+			// handle last integer phase before sync from the previous wave cycle
+			float const up_before_zero = -sync_fraction;
+			value += PolyBLEP(phase - up_before_zero, w);
+
+			// handle discontinuity at integer phases
 			if (up_nearest > 0 && up_nearest <= config.sync_phase)
-				value += PolyBLEP(state.phase - up_nearest, w);
+				value += PolyBLEP(phase - up_nearest, w);
 
 			// handle discontituity at sync phase
-			float const sync_value = GetSawtoothValue(config.sync_phase);
+			float const sync_value = GetSawtoothValue(sync_fraction);
 			if (sync_value < 0.999969482421875f)
 			{
-				value += PolyBLEP(state.phase, w, 1 - sync_value);
-				value += PolyBLEP(state.phase - config.sync_phase, w, 1 - sync_value);
+				value += PolyBLEP(phase, w, 1 - sync_value);
+				value += PolyBLEP(phase - config.sync_phase, w, 1 - sync_value);
 			}
 		}
 		else
 		{
-			value += PolyBLEP(state.phase - up_nearest, w);
+			value += PolyBLEP(phase - up_nearest, w);
 		}
 	}
 #endif

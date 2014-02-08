@@ -58,8 +58,65 @@ static float OscillatorHold(OscillatorConfig const &config, OscillatorState &sta
 	return value;
 }
 
+// shared data oscillator
+static float OscillatorLerp(OscillatorConfig const &config, OscillatorState &state, float data[], int cycle, float step)
+{
+	if (step > 0.5f * cycle)
+		return 0;
+
+	// current and next wavetable value
+	int const index0 = state.index;
+	float const value0 = data[index0];
+	int const index1 = state.index < cycle ? state.index + 1 : 0;
+	float const value1 = data[index1];
+	float value = value0 + (value1 - value0) * state.phase;
+
+#if ANTIALIAS == ANTIALIAS_POLYBLEP
+	if (use_antialias)
+	{
+		float w = Min(step * INTEGRATED_POLYBLEP_WIDTH, 8.0f);
+
+		int const back = FloorInt(state.phase - w);
+		int const ahead = FloorInt(state.phase + w);
+		int const count = ahead - back;
+		if (count > 0)
+		{
+			int i = index0 + back + cycle;
+			if (i >= cycle)
+				i -= cycle;
+			float const vn1 = data[i];
+			if (++i >= cycle)
+				i -= cycle;
+			float t = state.phase - back;
+			float v0 = data[i];
+			float s0 = v0 - vn1;
+			for (int c = 0; c < count; ++c)
+			{
+				if (++i >= cycle)
+					i -= cycle;
+				t -= 1.0f;
+				float const v1 = data[i];
+				float const s1 = v1 - v0;
+				if (s0 != s1)
+					value += IntegratedPolyBLEP(t, w, s1 - s0);
+				v0 = v1;
+				s0 = s1;
+			}
+		}
+	}
+#endif
+	return value;
+}
+
+
 // sample-and-hold noise
-extern float OscillatorNoiseHold(OscillatorConfig const &config, OscillatorState &state, float step)
+float OscillatorNoiseHold(OscillatorConfig const &config, OscillatorState &state, float step)
 {
 	return OscillatorHold(config, state, noise, ARRAY_SIZE(noise), step);
+}
+
+// linear interpolated noise
+float OscillatorNoiseSlope(OscillatorConfig const &config, OscillatorState &state, float step)
+{
+	return OscillatorLerp(config, state, noise, ARRAY_SIZE(noise), step);
 }

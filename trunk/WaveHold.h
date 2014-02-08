@@ -8,3 +8,4 @@ extern void InitNoise();
 
 // sample-and-hold noise
 extern float OscillatorNoiseHold(OscillatorConfig const &config, OscillatorState &state, float step);
+extern float OscillatorNoiseSlope(OscillatorConfig const &config, OscillatorState &state, float step);

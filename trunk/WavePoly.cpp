@@ -24,6 +24,25 @@ char pulsepoly5[ARRAY_SIZE(poly5) * 2];
 char poly4poly5[ARRAY_SIZE(poly5) * ARRAY_SIZE(poly4)];
 char poly17poly5[ARRAY_SIZE(poly5) * ARRAY_SIZE(poly17)];
 
+static char const * const poly_data[WAVE_COUNT] =
+{
+	NULL,			// WAVE_SINE,
+	NULL,			// WAVE_PULSE,
+	NULL,			// WAVE_SAWTOOTH,
+	NULL,			// WAVE_TRIANGLE,
+	NULL,			// WAVE_NOISE,
+	NULL,			// WAVE_NOISE_HOLD,
+	NULL,			// WAVE_NOISE_SLOPE,
+	poly4,			// WAVE_POLY4,
+	poly5,			// WAVE_POLY5,
+	period93,		// WAVE_PERIOD93,
+	poly9,			// WAVE_POLY9,
+	poly17,			// WAVE_POLY17,
+	pulsepoly5,		// WAVE_PULSE_POLY5,
+	poly4poly5,		// WAVE_POLY4_POLY5,
+	poly17poly5,	// WAVE_POLY17_POLY5,
+};
+
 // generate polynomial table
 // from Atari800 pokey.c
 static void InitPoly(char aOut[], int aSize, int aTap, unsigned int aSeed, char aInvert)
@@ -104,13 +123,17 @@ void InitPoly()
 }
 
 // shared poly oscillator
-static float OscillatorPoly(OscillatorConfig const &config, OscillatorState &state, char poly[], int cycle, float step)
+float OscillatorPoly(OscillatorConfig const &config, OscillatorState &state, float step)
 {
+	// poly info for the wave type
+	int const cycle = wave_loop_cycle[config.wavetype];
 	if (step > 0.5f * cycle)
 		return 0;
 
 	// current wavetable value
+	char const * const poly = poly_data[config.wavetype];
 	float value = poly[state.index];
+
 #if ANTIALIAS == ANTIALIAS_POLYBLEP
 	if (use_antialias)
 	{
@@ -139,59 +162,6 @@ static float OscillatorPoly(OscillatorConfig const &config, OscillatorState &sta
 		}
 	}
 #endif
+
 	return value + value - 1.0f;
-}
-
-// poly4 oscillator
-// 4-bit linear feedback shift register noise
-float OscillatorPoly4(OscillatorConfig const &config, OscillatorState &state, float step)
-{
-	return OscillatorPoly(config, state, poly4, ARRAY_SIZE(poly4), step);
-}
-
-// poly5 oscillator
-// 5-bit linear feedback shift register noise
-float OscillatorPoly5(OscillatorConfig const &config, OscillatorState &state, float step)
-{
-	return OscillatorPoly(config, state, poly5, ARRAY_SIZE(poly5), step);
-}
-
-// period93 oscillator
-// 15-bit linear feedback shift register noise with variant tap position
-float OscillatorPeriod93(OscillatorConfig const &config, OscillatorState &state, float step)
-{
-	return OscillatorPoly(config, state, period93, ARRAY_SIZE(period93), step);
-}
-
-// poly9 oscillator
-// 9-bit linear feedback shift register noise
-float OscillatorPoly9(OscillatorConfig const &config, OscillatorState &state, float step)
-{
-	return OscillatorPoly(config, state, poly9, ARRAY_SIZE(poly9), step);
-}
-
-// poly17 oscillator
-// 17-bit linear feedback shift register noise
-float OscillatorPoly17(OscillatorConfig const &config, OscillatorState &state, float step)
-{
-	return OscillatorPoly(config, state, poly17, ARRAY_SIZE(poly17), step);
-}
-
-// pulse wave clocked by poly5
-// (what the Atari POKEY actually does with poly5)
-float OscillatorPulsePoly5(OscillatorConfig const &config, OscillatorState &state, float step)
-{
-	return OscillatorPoly(config, state, pulsepoly5, ARRAY_SIZE(pulsepoly5), step);
-}
-
-// poly4 clocked by poly5
-float OscillatorPoly4Poly5(OscillatorConfig const &config, OscillatorState &state, float step)
-{
-	return OscillatorPoly(config, state, poly4poly5, ARRAY_SIZE(poly4poly5), step);
-}
-
-// poly17 clocked by poly5
-float OscillatorPoly17Poly5(OscillatorConfig const &config, OscillatorState &state, float step)
-{
-	return OscillatorPoly(config, state, poly17poly5, ARRAY_SIZE(poly17poly5), step);
 }

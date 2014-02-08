@@ -24,32 +24,5 @@ extern char poly17poly5[ARRAY_SIZE(poly5) * ARRAY_SIZE(poly17)];
 // initialize polynomial noise tables
 extern void InitPoly();
 
-// poly4 waveform
-// 4-bit linear feedback shift register noise
-extern float OscillatorPoly4(OscillatorConfig const &config, OscillatorState &state, float step);
-
-// poly5 waveform
-// 5-bit linear feedback shift register noise
-extern float OscillatorPoly5(OscillatorConfig const &config, OscillatorState &state, float step);
-
-// period-93 waveform
-// 15-bit linear feedback shift register noise with variant tap position
-extern float OscillatorPeriod93(OscillatorConfig const &config, OscillatorState &state, float step);
-
-// poly9 waveform
-// 9-bit linear feedback shift register noise
-extern float OscillatorPoly9(OscillatorConfig const &config, OscillatorState &state, float step);
-
-// poly17 waveform
-// 17-bit linear feedback shift register noise
-extern float OscillatorPoly17(OscillatorConfig const &config, OscillatorState &state, float step);
-
-// pulse wave clocked by poly5
-// (what the Atari POKEY actually does with poly5)
-extern float OscillatorPulsePoly5(OscillatorConfig const &config, OscillatorState &state, float step);
-
-// poly4 clocked by poly5
-extern float OscillatorPoly4Poly5(OscillatorConfig const &config, OscillatorState &state, float step);
-
-// poly17 clocked by poly5
-extern float OscillatorPoly17Poly5(OscillatorConfig const &config, OscillatorState &state, float step);
+// poly waveform
+extern float OscillatorPoly(OscillatorConfig const &config, OscillatorState &state, float step);
