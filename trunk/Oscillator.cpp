@@ -22,6 +22,7 @@ void OscillatorState::Reset()
 void OscillatorState::Start()
 {
 //	Reset();
+	phase = 0.0f;
 }
 
 // update oscillator
@@ -49,21 +50,25 @@ void OscillatorState::Advance(OscillatorConfig const &config, float delta)
 {
 	phase += delta;
 #if 1
+	int const advance = FloorInt(phase);
+	if (advance)
+	{
+		// wrap phase around
+		phase -= advance;
+
+		// advance the wavetable index
+		index += advance;
+		if (index >= int(config.cycle))
+			index -= int(config.cycle);
+		else if (index < 0)
+			index += int(config.cycle);
+	}
 	if (config.sync_enable)
 	{
 		if (phase >= config.sync_phase - index)
 		{
 			phase -= config.sync_phase - index;
 			index = 0;
-		}
-	}
-	else
-	{
-		int const advance = FloorInt(phase);
-		if (advance)
-		{
-			phase -= advance;
-			index += advance;
 		}
 	}
 #else
