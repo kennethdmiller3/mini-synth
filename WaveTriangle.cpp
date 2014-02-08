@@ -25,53 +25,60 @@ float OscillatorTriangle(OscillatorConfig const &config, OscillatorState &state,
 #if ANTIALIAS == ANTIALIAS_POLYBLEP
 	if (use_antialias)
 	{
+		float phase = state.phase;
+
 		float const w = Min(step * INTEGRATED_POLYBLEP_WIDTH, 0.5f);
 
 		// nearest /\ slope transtiion
-		float const down_nearest = float(FloorInt(state.phase + 0.25f)) + 0.25f;
+		float down_nearest = float(phase >= 0.75f) + 0.25f;
 
 		// nearest \/ slope transition
-		float const up_nearest = float(FloorInt(state.phase - 0.25f)) + 0.75f;
+		float up_nearest = float(phase >= 0.25f) - 0.25f;
 
 		if (config.sync_enable)
 		{
+			int const index = state.index;
+			phase += index;
+			down_nearest += index;
+			up_nearest += index;
+
 			// handle discontinuity at 0
-			if (state.phase < w)
+			if (phase < w)
 			{
 				// sync during downward slope creates a \/ transition
 				float const sync_fraction = config.sync_phase - float(FloorInt(config.sync_phase));
 				if (sync_fraction > 0.25f && sync_fraction < 0.75)
-					value += IntegratedPolyBLEP(state.phase, w);
+					value += IntegratedPolyBLEP(phase, w);
 
 				// wave value discontinuity creates a | transition 
-				float const sync_value = GetTriangleValue(config.sync_phase);
-				value -= PolyBLEP(state.phase, w, sync_value);
+				float const sync_value = GetTriangleValue(sync_fraction);
+				value -= PolyBLEP(phase, w, sync_value);
 			}
 
 			// handle /\ and \/ slope discontinuities
 			if (down_nearest > 0 && down_nearest < config.sync_phase)
-				value -= IntegratedPolyBLEP(state.phase - down_nearest, w);
+				value -= IntegratedPolyBLEP(phase - down_nearest, w);
 			if (up_nearest > 0 && up_nearest < config.sync_phase)
-				value += IntegratedPolyBLEP(state.phase - up_nearest, w);
+				value += IntegratedPolyBLEP(phase - up_nearest, w);
 
 			// handle discontinuity at sync phase
-			if (state.phase - config.sync_phase < w)
+			if (phase - config.sync_phase > -w)
 			{
 				// sync during downward slope creates a \/ transition
 				float const sync_fraction = config.sync_phase - float(FloorInt(config.sync_phase));
 				if (sync_fraction > 0.25f && sync_fraction < 0.75)
-					value += IntegratedPolyBLEP(state.phase - config.sync_phase, w);
+					value += IntegratedPolyBLEP(phase - config.sync_phase, w);
 
 				// wave value discontinuity creates a | transition 
-				float const sync_value = GetTriangleValue(config.sync_phase);
-				value += PolyBLEP(state.phase - config.sync_phase, w, sync_value);
+				float const sync_value = GetTriangleValue(sync_fraction);
+				value -= PolyBLEP(phase - config.sync_phase, w, sync_value);
 			}
 		}
 		else
 		{
 			// handle /\ and \/ slope discontinuities
-			value -= IntegratedPolyBLEP(state.phase - down_nearest, w);
-			value += IntegratedPolyBLEP(state.phase - up_nearest, w);
+			value -= IntegratedPolyBLEP(phase - down_nearest, w);
+			value += IntegratedPolyBLEP(phase - up_nearest, w);
 		}
 	}
 #endif

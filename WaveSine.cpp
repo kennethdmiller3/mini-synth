@@ -27,24 +27,28 @@ float OscillatorSine(OscillatorConfig const &config, OscillatorState &state, flo
 {
 	if (step > 0.5f)
 		return 0.0f;
-	float value = GetSineValue(state.phase);
+	float phase = state.phase;
+	float value = GetSineValue(phase);
 #if ANTIALIAS == ANTIALIAS_POLYBLEP
 	if (use_antialias && config.sync_enable)
 	{
+		int const index = state.index;
+		phase += index;
+
 		float const w = Min(step * POLYBLEP_WIDTH, 1.0f);
 
 		// handle discontinuity at zero phase
-		if (state.phase < w)
+		if (phase < w)
 		{
-			value -= PolyBLEP(state.phase, w, GetSineValue(config.sync_phase) - SINE_VALUE_AT_0);
-			value -= IntegratedPolyBLEP(state.phase, w, GetSineSlope(config.sync_phase) - SINE_SLOPE_AT_0);
+			value -= PolyBLEP(phase, w, GetSineValue(config.sync_phase) - SINE_VALUE_AT_0);
+			value -= IntegratedPolyBLEP(phase, w, GetSineSlope(config.sync_phase) - SINE_SLOPE_AT_0);
 		}
 
 		// handle discontinuity at sync phase
-		if (state.phase - config.sync_phase > -w)
+		if (phase - config.sync_phase > -w)
 		{
-			value -= PolyBLEP(state.phase - config.sync_phase, w, GetSineValue(config.sync_phase) - SINE_VALUE_AT_0);
-			value -= IntegratedPolyBLEP(state.phase - config.sync_phase, w, GetSineSlope(config.sync_phase) - SINE_SLOPE_AT_0);
+			value -= PolyBLEP(phase - config.sync_phase, w, GetSineValue(config.sync_phase) - SINE_VALUE_AT_0);
+			value -= IntegratedPolyBLEP(phase - config.sync_phase, w, GetSineSlope(config.sync_phase) - SINE_SLOPE_AT_0);
 		}
 	}
 #endif
