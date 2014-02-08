@@ -31,30 +31,52 @@ static CHAR_INFO const plot[2] = {
 static COORD const pos = { 0, 0 };
 static COORD const size = { WAVEFORM_WIDTH, WAVEFORM_HEIGHT };
 
-// plot one step
-static float UpdateWaveformStep(NoteOscillatorConfig config[], OscillatorState state[], float step[], float delta[], FilterState &filter)
+// local filter for plot
+static FilterState filter;
+
+// detect when to reset the filter
+static bool prev_active;
+static int prev_v;
+
+// previous frame time
+static DWORD prevTime = timeGetTime();
+
+// leftover cycles
+static float cyclesLeftOver;
+
+// get oscillator value
+static float UpdateOscillatorOutput(NoteOscillatorConfig const config[], OscillatorState state[], float step[], float delta[])
 {
-	// sum the oscillator outputs
 	float value = 0.0f;
 	for (int o = 0; o < NUM_OSCILLATORS; ++o)
 	{
 		if (!config[o].enable)
 			continue;
-		if (config[o].sync_enable)
-			config[o].sync_phase = config[o].frequency / config[0].frequency;
 		if (config[o].sub_osc_mode)
 			value += config[o].sub_osc_amplitude * SubOscillator(config[o], state[o], delta[o]);
 		value += state[o].Compute(config[o], delta[o]);
 		state[o].Advance(config[o], step[o]);
 	}
+	return value;
+}
 
+// get one waveform step
+static float UpdateWaveformStep(int oversample, NoteOscillatorConfig const config[], OscillatorState state[], float step[], float delta[], FilterState &filter)
+{
 	if (flt_config.enable)
 	{
-		// apply filter
-		value = filter.Update(flt_config, value);
+		// sum the oscillator outputs
+		float value = 0;
+		for (int i = 0; i < oversample; ++i)
+		{
+			value += filter.Update(flt_config, UpdateOscillatorOutput(config, state, step, delta));
+		}
+		return value / oversample;
 	}
-
-	return value;
+	else
+	{
+		return UpdateOscillatorOutput(config, state, step, delta);
+	}
 }
 
 // waveform display settings
@@ -66,73 +88,62 @@ void UpdateOscillatorWaveformDisplay(HANDLE hOut, BASS_INFO const &info, int con
 	// waveform buffer
 	CHAR_INFO buf[WAVEFORM_HEIGHT][WAVEFORM_WIDTH] = { 0 };
 
-	// get low-frequency oscillator value
-	// (assume it is constant for the duration)
-	float const lfo = lfo_state.Update(lfo_config, 0.0f);
+	// read-only reference to the oscillators
+	NoteOscillatorConfig const * const config = osc_config;
 
 	// how many cycles to plot?
-	int cycle = osc_config[0].cycle;
+	int cycle = config[0].cycle;
 	if (cycle == INT_MAX)
 	{
-		if (osc_config[0].sub_osc_mode == SUBOSC_NONE)
+		if (config[0].sub_osc_mode == SUBOSC_NONE)
 			cycle = 1;
-		else if (osc_config[0].sub_osc_mode < SUBOSC_SQUARE_2OCT)
+		else if (config[0].sub_osc_mode < SUBOSC_SQUARE_2OCT)
 			cycle = 2;
 		else
 			cycle = 4;
 	}
-	else if (cycle > WAVEFORM_WIDTH / 2)
+	else if (cycle > WAVEFORM_WIDTH / 4)
 	{
-		cycle = WAVEFORM_WIDTH / 2;
+		cycle = WAVEFORM_WIDTH / 4;
 	}
-
-	// base phase step for plot
-	float const step_base = cycle / float(WAVEFORM_WIDTH);
 
 	// key frequency
 	float const key_freq = Control::pitch_scale * note_frequency[voice_note[v]];
 
-	// key velocity
-	float const key_vel = voice_vel[v] / 64.0f;
+	// oscillator 1 frequency
+	float const osc1_freq = key_freq * config[0].frequency;
 
 	// base phase delta
-	float const delta_base = key_freq / info.freq;
+	float const delta_base = osc1_freq / info.freq;
 
-	// local oscillators for plot
-	NoteOscillatorConfig config[NUM_OSCILLATORS];
+	// step oversampling factor
+	// (to prevent instability in the filter)
+	int oversample = flt_config.enable ? CeilingInt(cycle / float(WAVEFORM_WIDTH * delta_base)) : 1;
+
+	// base phase step for plot
+	float const step_base = cycle / float(WAVEFORM_WIDTH * oversample);
+
+	// local oscillator state for plot
 	OscillatorState state[NUM_OSCILLATORS];
+
+	// compute phase steps and deltas for each oscillator
 	float step[NUM_OSCILLATORS];
 	float delta[NUM_OSCILLATORS];
-
 	for (int o = 0; o < NUM_OSCILLATORS; ++o)
 	{
-		// copy current oscillator config
-		config[o] = osc_config[o];
-
-		// compute shared oscillator values
-		// (assume that LFO doesn't change over the plotted period)
-		config[o].Modulate(lfo);
-
 		// step and delta phase
 		float const relative = config[o].frequency / config[0].frequency;
 		step[o] = step_base * relative;
-		delta[o] = delta_base * config[0].frequency * relative;
+		delta[o] = delta_base * relative;
 
 		// half-step initial phase
 		state[o].phase = 0.5f * step[o];
 	}
 
-	// local filter for plot
-	static FilterState filter;
-
-	// detect when to reset the filter
-	static bool prev_active;
-	static int prev_v;
-
 	// elapsed time in milliseconds since the previous frame
-	static DWORD prevTime = timeGetTime();
-	DWORD deltaTime = timeGetTime() - prevTime;
-	prevTime += deltaTime;
+	DWORD curTime = timeGetTime();
+	DWORD deltaTime = Min(curTime - prevTime, 33UL);
+	prevTime = curTime;
 
 	// reset filter state on playing a note
 	if (prev_v != v)
@@ -150,20 +161,34 @@ void UpdateOscillatorWaveformDisplay(HANDLE hOut, BASS_INFO const &info, int con
 	// if the filter is enabled...
 	if (flt_config.enable)
 	{
+		// get low-frequency oscillator value
+		// (assume it is constant for the duration)
+		float const lfo = lfo_state.Update(lfo_config, 0.0f);
+
 		// get filter envelope generator amplitude
 		float const flt_env_amplitude = flt_env_state[v].amplitude;
 
+		// key velocity
+		float const key_vel = voice_vel[v] / 64.0f;
+
 		// compute cutoff frequency
 		// (assume key follow)
-		float const cutoff = flt_config.GetCutoff(lfo, flt_env_amplitude, key_vel);
+		float const cutoff = key_freq * flt_config.GetCutoff(lfo, flt_env_amplitude, key_vel);
 
 		// set up the filter
 		// (assume it is constant for the duration)
-		filter.Setup(cutoff, flt_config.resonance, step_base);
+		filter.Setup(cutoff / osc1_freq, flt_config.resonance, step_base);
 
-		// get steps needed to advance OSC1 by the time step
-		// (subtracting the steps that the plot itself will take)
-		int steps = FloorInt(key_freq * config[0].frequency * deltaTime / 1000 - 1) * WAVEFORM_WIDTH;
+		// compute the number of cycles since last frame
+		float totalCycles = osc1_freq * deltaTime / 1000 + cyclesLeftOver;
+		int fullCycles = FloorInt(totalCycles);
+		cyclesLeftOver = totalCycles - fullCycles;
+
+		// compute the number of steps since last frame
+		// (subtracting the steps that the plot itself took)
+		int steps = (fullCycles - cycle) * WAVEFORM_WIDTH;
+
+		//int steps = RoundInt(RoundInt(osc1_freq * deltaTime / 1000 - cycle) / delta[0]);
 		if (steps > 0)
 		{
 			// "rewind" oscillators so they'll end at zero phase
@@ -171,16 +196,13 @@ void UpdateOscillatorWaveformDisplay(HANDLE hOut, BASS_INFO const &info, int con
 			{
 				if (!config[o].enable)
 					continue;
-				if (config[o].sync_enable)
-					config[o].sync_phase = config[o].frequency / config[0].frequency;
-				state[o].Advance(config[o], -step[o] * steps);
+				state[o].Advance(config[o], -step[o] * oversample * steps);
 			}
 
-			// run the filter ahead for next time
+			// run oscillators and filters forward
 			for (int x = 0; x < steps; ++x)
 			{
-				// sum the oscillator outputs
-				UpdateWaveformStep(config, state, step, delta, filter);
+				UpdateWaveformStep(oversample, config, state, step, delta, filter);
 			}
 		}
 	}
@@ -206,7 +228,7 @@ void UpdateOscillatorWaveformDisplay(HANDLE hOut, BASS_INFO const &info, int con
 	for (int x = 0; x < WAVEFORM_WIDTH; ++x)
 	{
 		// sum the oscillator outputs
-		float const value = amp_env_amplitude * UpdateWaveformStep(config, state, step, delta, filter);
+		float const value = amp_env_amplitude * UpdateWaveformStep(oversample, config, state, step, delta, filter);
 
 		// plot waveform column
 		int grid_y = FloorInt(-(WAVEFORM_HEIGHT - 0.5f) * value);
