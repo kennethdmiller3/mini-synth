@@ -30,8 +30,8 @@ namespace Menu
 			break;
 		case WAVETYPE:
 			config.SetWaveType(Wave((config.wavetype + WAVE_COUNT + sign) % WAVE_COUNT));
-			for (int k = 0; k < VOICES; ++k)
-				osc_state[k][osc].Reset();
+			for (int v = 0; v < VOICES; ++v)
+				osc_state[v][osc].Reset();
 			break;
 		case WAVEPARAM_BASE:
 			UpdatePercentageProperty(config.waveparam_base, sign, modifiers, 0, 1);
