@@ -266,14 +266,35 @@ void FilterState::Setup(float const cutoff, float const resonance, float const s
 	// http://www.willpirkle.com/Downloads/AN-4VirtualAnalogFilters.2.0.pdf
 
 	feedback = resonance * 4.0f;
-	float const f = 0.5f*M_PI*fc;
-	//float const g = tanf(f);
-	// approximation of tangent http://www.musicdsp.org/showone.php?id=115
-	float const ff = f * f;
-	//float const g = f * (1 + ff * (0.3333314036f + ff * (0.1333923995f + ff * (0.0533740603f + ff * (0.0245650893f + ff * (0.002900525f + ff * 0.0095168091f))))));
-	float const g = f * (1 + ff * (0.31755f + ff * 0.2033f));
-	inv1g = 1 / (1 + g);
-	G = g * inv1g;
+	if (fc < 0.5f)
+	{
+		float const f = 0.5f * M_PI * fc;
+		//float const g = tanf(f);
+		// polynomial approximation of tangent
+		// http://www.musicdsp.org/showone.php?id=115
+		// accurate for fc in the range [0.0,0.5]
+		float const ff = f * f;
+		//float const g = f * (1 + ff * (0.3333314036f + ff * (0.1333923995f + ff * (0.0533740603f + ff * (0.0245650893f + ff * (0.002900525f + ff * 0.0095168091f))))));
+		float const g = f * (1 + ff * (0.31755f + ff * 0.2033f));
+		inv1g = 1 / (1 + g);
+	}
+	else if (fc < 1.0f)
+	{
+		// use the identity 1 / tan(0.5 pi (1 - fc)) = tan(0.5 pi fc)
+        // accurate for fc in the range [0.5,1.0]
+		float const f = 0.5f * M_PI * (1 - fc);
+		float const ff = f * f;
+		float const invg = f * (1 + ff * (0.31755f + ff * 0.2033f));
+		// 1/(1+1/g) = g/(g+1) = 1-(1/(g+1))
+		inv1g = 1 - 1 / (1 + invg);
+	}
+	else
+	{
+		// 1/(1+infinity) = 0
+		inv1g = 0;
+	}
+	// g/(1+g) = 1-(1/(1+g))
+	G = 1 - inv1g;
 	alpha0 = 1 / (1 + feedback * G * G * G * G);
 #endif
 }
@@ -333,7 +354,7 @@ float FilterState::Update(FilterConfig const &config, float const input)
 		// nonlinear feedback with gain compensation
 #if SATURATE == SATURATE_INPUT
 		y[0] = Saturate(input - feedback * (delayed - GAIN_COMPENSATION * input));
-##else
+#else
 		y[0] = input - feedback * (Saturate(delayed) - GAIN_COMPENSATION * input);
 #endif
 
