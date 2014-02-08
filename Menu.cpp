@@ -246,6 +246,7 @@ namespace Menu
 			flags[0] = 0; flags[1] = 0;
 		}
 
+		p.Y = pos.Y;
 		for (int i = 0; i < count; ++i)
 		{
 			Print(i, hOut, p, flags[item == i]);
