@@ -8,7 +8,7 @@ Key-Related Values
 
 // number of keys
 // TO DO: separate "voices" from "keys"
-#define KEYS 24
+#define KEYS 25
 
 // note key bindings
 extern WORD const keys[KEYS];

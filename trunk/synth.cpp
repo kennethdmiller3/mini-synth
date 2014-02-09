@@ -410,36 +410,36 @@ void __cdecl main(int argc, char **argv)
 					}
 					else if (code == VK_OEM_4)	// '['
 					{
-						if (keyboard_octave > 0)
+						if (keyboard_octave > 1)
 						{
 							for (int k = 0; k < KEYS; ++k)
 							{
 								if (key_down[k])
-									NoteOff(k + keyboard_octave * 12 + 12);
+									NoteOff(k + keyboard_octave * 12);
 							}
 							--keyboard_octave;
 							for (int k = 0; k < KEYS; ++k)
 							{
 								if (key_down[k])
-									NoteOn(k + keyboard_octave * 12 + 12);
+									NoteOn(k + keyboard_octave * 12);
 							}
 							PrintKeyOctave(hOut);
 						}
 					}
 					else if (code == VK_OEM_6)	// ']'
 					{
-						if (keyboard_octave < 8)
+						if (keyboard_octave < 9)
 						{
 							for (int k = 0; k < KEYS; ++k)
 							{
 								if (key_down[k])
-									NoteOff(k + keyboard_octave * 12 + 12);
+									NoteOff(k + keyboard_octave * 12);
 							}
 							++keyboard_octave;
 							for (int k = 0; k < KEYS; ++k)
 							{
 								if (key_down[k])
-									NoteOn(k + keyboard_octave * 12 + 12);
+									NoteOn(k + keyboard_octave * 12);
 							}
 							PrintKeyOctave(hOut);
 						}
@@ -492,12 +492,12 @@ void __cdecl main(int argc, char **argv)
 							if (down)
 							{
 								// note on
-								NoteOn(k + keyboard_octave * 12 + 12);
+								NoteOn(k + keyboard_octave * 12);
 							}
 							else
 							{
 								// note off
-								NoteOff(k + keyboard_octave * 12 + 12);
+								NoteOff(k + keyboard_octave * 12);
 							}
 						}
 						break;
@@ -508,7 +508,7 @@ void __cdecl main(int argc, char **argv)
 
 		// center frequency of the zeroth semitone band
 		// (one octave down from the lowest key)
-		float const freq_min = note_frequency[keyboard_octave * 12];
+		float const freq_min = 0.5f * note_frequency[keyboard_octave * 12];
 
 		// update the spectrum analyzer display
 		UpdateSpectrumAnalyzer(hOut, stream, info, freq_min);

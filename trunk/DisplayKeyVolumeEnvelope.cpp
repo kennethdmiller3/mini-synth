@@ -55,7 +55,7 @@ void UpdateKeyVolumeEnvelopeDisplay(HANDLE hOut)
 	}
 
 	DWORD written;
-	int x = key_pos.X - keyboard_octave * 12 - 12;
+	int x = key_pos.X - keyboard_octave * 12;
 	int x0 = Max(x, 0);
 	int x1 = Min(x + NOTES, 80);
 	WriteConsoleOutputAttribute(hOut, note_env_attrib - x, x1 - x0, { 0, key_pos.Y }, &written);

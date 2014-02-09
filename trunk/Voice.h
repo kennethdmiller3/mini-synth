@@ -7,8 +7,8 @@ Voice Assignment
 */
 
 // midi note frequencies
-// (11 octaves)
-#define NOTES 132
+// (11 octaves + 1)
+#define NOTES 133
 extern float note_frequency[NOTES];
 
 // number of voices
