@@ -4,9 +4,7 @@
 #include "OscillatorNote.h"
 #include "Filter.h"
 #include "Amplifier.h"
-
-// midi note frequencies
-float note_frequency[NOTES];
+#include "Control.h"
 
 // current note assignemnts
 // (via keyboard or midi input)
@@ -59,6 +57,13 @@ int ChooseVoice(int note)
 	return voice;
 }
 
+// note frequency
+float NoteFrequency(int note, float follow)
+{
+	float const base = (note - 60) / 12.0f + Control::pitch_offset;
+	return powf(2, follow * base) * middle_c_frequency;
+}
+
 // note on
 int NoteOn(int note, int velocity)
 {
@@ -94,7 +99,6 @@ int NoteOn(int note, int velocity)
 
 	return voice;
 }
-
 
 // note off
 int NoteOff(int note, int velocity)

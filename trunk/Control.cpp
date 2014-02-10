@@ -10,18 +10,18 @@ namespace Control
 {
 	// pitch wheel value
 	int pitch_wheel;
-	float pitch_scale;
+	float pitch_offset;
 
 	void SetPitchWheel(int value)
 	{
 		pitch_wheel = value;
-		pitch_scale = powf(2.0f, float(pitch_wheel * 2) / float(0x2000 * 12));
+		pitch_offset = float(pitch_wheel * 2) / float(0x2000 * 12);
 	}
 
 	// reset all controllers
 	void ResetAll()
 	{
 		pitch_wheel = 0;
-		pitch_scale = 1;
+		pitch_offset = 0;
 	}
 }

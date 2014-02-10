@@ -31,6 +31,9 @@ public:
 	SubOscillatorMode sub_osc_mode;
 	float sub_osc_amplitude;
 
+	// key follow
+	float key_follow;
+
 	explicit NoteOscillatorConfig(bool const enable = false, Wave const wavetype = WAVE_SAWTOOTH, float const waveparam = 0.5f, float const frequency = 1.0f, float const amplitude = 1.0f)
 		: OscillatorConfig(enable, wavetype, waveparam, frequency, amplitude)
 		, waveparam_base(waveparam)
@@ -39,6 +42,7 @@ public:
 		, waveparam_lfo(0.0f)
 		, frequency_lfo(0.0f)
 		, amplitude_lfo(0.0f)
+		, key_follow(1.0f)
 		, sub_osc_mode(SUBOSC_NONE)
 		, sub_osc_amplitude(0.0f)
 	{

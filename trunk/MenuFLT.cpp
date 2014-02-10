@@ -14,7 +14,7 @@ Filter Menu
 
 namespace Menu
 {
-	FLT menu_flt({ 41, 18 }, "F4 FLT", FLT::COUNT);
+	FLT menu_flt({ 61, 12 }, "F4 FLT", FLT::COUNT);
 
 	void FLT::Update(int index, int sign, DWORD modifiers)
 	{
@@ -41,6 +41,9 @@ namespace Menu
 			break;
 		case CUTOFF_ENV_VEL:
 			UpdatePitchProperty(flt_config.cutoff_env_vel, sign, modifiers, -10, 10);
+			break;
+		case KEY_FOLLOW:
+			UpdatePercentageProperty(flt_config.key_follow, sign, modifiers, -2, 2);
 			break;
 		case ENV_ATTACK:
 			UpdateTimeProperty(flt_env_config.attack_time, sign, modifiers, 0, 10);
@@ -86,6 +89,9 @@ namespace Menu
 			break;
 		case CUTOFF_ENV_VEL:
 			PrintItemFloat(hOut, pos, flags, "Cutoff VEL:% 7.2f", flt_config.cutoff_env_vel * 12.0f);
+			break;
+		case KEY_FOLLOW:
+			PrintItemFloat(hOut, pos, flags, "Key Follow:% 6.1f%%", flt_config.key_follow * 100.0f);
 			break;
 		case ENV_ATTACK:
 			PrintItemFloat(hOut, pos, flags, "Attack:   %7.3fs", flt_env_config.attack_time);

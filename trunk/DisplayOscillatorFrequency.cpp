@@ -17,8 +17,8 @@ Oscillator Frequency Display
 // show oscillator frequency
 void UpdateOscillatorFrequencyDisplay(HANDLE hOut, int const v, int const o)
 {
-	// key frequency (taking pitch wheel control into account)
-	float const key_freq = Control::pitch_scale * note_frequency[voice_note[v]];
+	// oscillator key frequency (taking key follow and pitch wheel control into account)
+	float const osc_key_freq = NoteFrequency(voice_note[v], osc_config[o].key_follow);
 
 	// get attributes to use
 	COORD const pos = { Menu::menu_osc[o].pos.X + 8, Menu::menu_osc[o].pos.Y };
@@ -29,7 +29,7 @@ void UpdateOscillatorFrequencyDisplay(HANDLE hOut, int const v, int const o)
 	WORD const unit_attrib = (title_attrib & 0xF8) | (FOREGROUND_RED | FOREGROUND_GREEN | FOREGROUND_BLUE);
 
 	// current frequency in Hz
-	float const freq = key_freq * osc_config[o].frequency;
+	float const freq = osc_key_freq * osc_config[o].frequency;
 
 	if (freq >= 20000.0f)
 	{
