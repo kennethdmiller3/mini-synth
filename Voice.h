@@ -6,10 +6,14 @@ Copyright 2014 Kenneth D. Miller III
 Voice Assignment
 */
 
+// frequency of middle c
+const float middle_c_frequency = 261.6255653005986346778499935233f;
+//const float middle_c_frequency = 256.0f;
+
+
 // midi note frequencies
 // (11 octaves + 1)
 #define NOTES 133
-extern float note_frequency[NOTES];
 
 // number of voices
 #define VOICES 16
@@ -25,6 +29,9 @@ extern int voice_most_recent;
 // most recent note key pressed
 // (via keyboard or midi input)
 extern int note_most_recent;
+
+// note frequency
+extern float NoteFrequency(int note, float follow);
 
 // note on
 // (returns voice index)

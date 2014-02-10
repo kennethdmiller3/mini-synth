@@ -13,7 +13,7 @@ Amplifier Menu
 
 namespace Menu
 {
-	AMP menu_amp({ 61, 12 }, "F5 AMP", AMP::COUNT);
+	AMP menu_amp({ 41, 18 }, "F5 AMP", AMP::COUNT);
 
 	void AMP::Update(int index, int sign, DWORD modifiers)
 	{

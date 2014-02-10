@@ -43,7 +43,7 @@ float CubicSaturate(float const x)
 static float const GAIN_COMPENSATION = 0.5f;
 
 // filter configuration
-FilterConfig flt_config(false, FilterConfig::LOWPASS_4, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f);
+FilterConfig flt_config(false, FilterConfig::LOWPASS_4, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f);
 
 // filter envelope config
 EnvelopeConfig flt_env_config(false, 0.0f, 1.0f, 0.0f, 0.1f);

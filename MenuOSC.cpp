@@ -51,6 +51,9 @@ namespace Menu
 		case AMPLITUDE_LFO:
 			UpdatePercentageProperty(config.amplitude_lfo, sign, modifiers, -10, 10);
 			break;
+		case KEY_FOLLOW:
+			UpdatePercentageProperty(config.key_follow, sign, modifiers, -2, 2);
+			break;
 		case SUB_OSC_MODE:
 			config.sub_osc_mode = SubOscillatorMode((config.sub_osc_mode + sign + SUBOSC_COUNT) % SUBOSC_COUNT);
 			break;
@@ -94,6 +97,9 @@ namespace Menu
 			break;
 		case AMPLITUDE_LFO:
 			PrintItemFloat(hOut, pos, flags, "Ampl LFO: %+7.1f%%", config.amplitude_lfo * 100.0f);
+			break;
+		case KEY_FOLLOW:
+			PrintItemFloat(hOut, pos, flags, "Key Follow:% 6.1f%%", config.key_follow * 100.0f);
 			break;
 		case SUB_OSC_MODE:
 			PrintItemString(hOut, pos, flags, "Sub Osc:%10s", sub_osc_name[config.sub_osc_mode]);

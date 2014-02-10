@@ -10,7 +10,7 @@ namespace Control
 {
 	// pitch wheel value
 	extern int pitch_wheel;
-	extern float pitch_scale;
+	extern float pitch_offset;
 
 	// set pitch wheel value
 	extern void SetPitchWheel(int value);

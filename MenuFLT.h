@@ -22,6 +22,7 @@ namespace Menu
 			CUTOFF_LFO,
 			CUTOFF_ENV,
 			CUTOFF_ENV_VEL,
+			KEY_FOLLOW,
 			ENV_ATTACK,
 			ENV_DECAY,
 			ENV_SUSTAIN,

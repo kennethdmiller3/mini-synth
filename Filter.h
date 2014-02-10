@@ -62,13 +62,17 @@ public:
 	float cutoff_env;
 	float cutoff_env_vel;
 
-	FilterConfig(bool const enable, Mode const mode, float const resonance, float const cutoff_base, float const cutoff_lfo, float const cutoff_env, float const cutoff_env_vel)
+	// key follow
+	float key_follow;
+
+	FilterConfig(bool const enable, Mode const mode, float const resonance, float const cutoff_base, float const cutoff_lfo, float const cutoff_env, float const cutoff_env_vel, float const key_follow)
 		: enable(enable)
+		, resonance(resonance)
 		, cutoff_base(cutoff_base)
 		, cutoff_lfo(cutoff_lfo)
 		, cutoff_env(cutoff_env)
 		, cutoff_env_vel(cutoff_env_vel)
-		, resonance(resonance)
+		, key_follow(key_follow)
 	{
 		SetMode(mode);
 	}

@@ -82,6 +82,26 @@ DWORD CALLBACK WriteStream(HSTREAM handle, float *buffer, DWORD length, void *us
 	// number of samples
 	size_t count = length / (2 * sizeof(buffer[0]));
 
+	// key frequencies
+	float osc_key_freq[VOICES][NUM_OSCILLATORS];
+	float flt_key_freq[VOICES];
+
+	// for each active voice...
+	for (int i = 0; i < active; ++i)
+	{
+		// get the voice index
+		int const v = index[i];
+
+		// compute oscillator key frequency
+		for (int o = 0; o < NUM_OSCILLATORS; ++o)
+		{
+			osc_key_freq[v][o] = NoteFrequency(voice_note[v], osc_config[o].key_follow);
+		}
+
+		// compute filter key frequency
+		flt_key_freq[v] = NoteFrequency(voice_note[v], flt_config.key_follow);
+	}
+
 	// low-frequency oscillator value
 	// (updated every BLOCK_UPDATE_SAMPLES)
 	float lfo = 0;
@@ -91,15 +111,12 @@ DWORD CALLBACK WriteStream(HSTREAM handle, float *buffer, DWORD length, void *us
 		// clear buffer
 		memset(buffer, 0, length);
 
-		// advance low-frequency oscillator
+		// get low-frequency oscillator value
 		if (lfo_config.enable)
 			lfo = lfo_state.Update(lfo_config, float(count) / info.freq);
 
-		// compute shared oscillator values
-		for (int o = 0; o < NUM_OSCILLATORS; ++o)
-		{
-			osc_config[o].Modulate(lfo);
-		}
+		// apply low-frequency oscillator
+		ApplyLFO(lfo);
 
 		return length;
 	}
@@ -158,14 +175,8 @@ DWORD CALLBACK WriteStream(HSTREAM handle, float *buffer, DWORD length, void *us
 				continue;
 			}
 
-			// key frequency (taking pitch wheel control into account)
-			float const key_freq = Control::pitch_scale * note_frequency[voice_note[v]];
-
 			// key velocity
 			float const key_vel = voice_vel[v] / 64.0f;
-
-			// key frequency times step
-			float const key_step = key_freq * step;
 
 			// update oscillators
 			// (assume key follow)
@@ -174,6 +185,7 @@ DWORD CALLBACK WriteStream(HSTREAM handle, float *buffer, DWORD length, void *us
 			{
 				if (!osc_config[o].enable)
 					continue;
+				float const key_step = osc_key_freq[v][o] * step;
 				if (osc_config[o].sub_osc_mode && osc_config[o].sub_osc_amplitude)
 					osc_value += osc_config[o].sub_osc_amplitude * SubOscillator(osc_config[o], osc_state[v][o], key_step);
 				osc_value += osc_state[v][o].Update(osc_config[o], key_step);
@@ -188,8 +200,7 @@ DWORD CALLBACK WriteStream(HSTREAM handle, float *buffer, DWORD length, void *us
 					float const flt_env_amplitude = flt_env_state[v].Update(flt_env_config, block_step);
 
 					// compute cutoff frequency
-					// (assume key follow)
-					float const cutoff = key_freq * flt_config.GetCutoff(lfo, flt_env_amplitude, key_vel);
+					float const cutoff = flt_key_freq[v] * flt_config.GetCutoff(lfo, flt_env_amplitude, key_vel);
 
 					// set up the filter
 					flt_state[v].Setup(cutoff, flt_config.resonance, step);
@@ -322,13 +333,6 @@ void __cdecl main(int argc, char **argv)
 
 	// initialize waves
 	InitWave();
-
-	// compute frequency for each note
-	for (int n = 0; n < NOTES; ++n)
-	{
-		note_frequency[n] = powf(2.0F, (n - 69) / 12.0f) * 440.0f;		// middle C = 261.626Hz; A above middle C = 440Hz
-		//note_frequency[n] = powF(2.0F, (n - 60) / 12.0f) * 256.0f;	// middle C = 256Hz
-	}
 
 	// enable the first oscillator
 	osc_config[0].enable = true;
@@ -508,7 +512,7 @@ void __cdecl main(int argc, char **argv)
 
 		// center frequency of the zeroth semitone band
 		// (one octave down from the lowest key)
-		float const freq_min = 0.5f * note_frequency[keyboard_octave * 12];
+		float const freq_min = powf(2, float(keyboard_octave - 6)) * middle_c_frequency;
 
 		// update the spectrum analyzer display
 		UpdateSpectrumAnalyzer(hOut, stream, info, freq_min);

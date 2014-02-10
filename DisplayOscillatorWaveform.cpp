@@ -107,11 +107,11 @@ void UpdateOscillatorWaveformDisplay(HANDLE hOut, BASS_INFO const &info, int con
 		cycle = WAVEFORM_WIDTH / 4;
 	}
 
-	// key frequency
-	float const key_freq = Control::pitch_scale * note_frequency[voice_note[v]];
+	// oscillator key frequency (taking key follow and pitch wheel control into account)
+	float const osc_key_freq = NoteFrequency(voice_note[v], osc_config[0].key_follow);
 
 	// oscillator 1 frequency
-	float const osc1_freq = key_freq * config[0].frequency;
+	float const osc1_freq = osc_key_freq * config[0].frequency;
 
 	// base phase delta
 	float const delta_base = osc1_freq / info.freq;
@@ -171,9 +171,12 @@ void UpdateOscillatorWaveformDisplay(HANDLE hOut, BASS_INFO const &info, int con
 		// key velocity
 		float const key_vel = voice_vel[v] / 64.0f;
 
+		// filter key frequency (taking key follow and pitch wheel control into account)
+		float const flt_key_freq = NoteFrequency(voice_note[v], flt_config.key_follow);
+
 		// compute cutoff frequency
 		// (assume key follow)
-		float const cutoff = key_freq * flt_config.GetCutoff(lfo, flt_env_amplitude, key_vel);
+		float const cutoff = flt_key_freq * flt_config.GetCutoff(lfo, flt_env_amplitude, key_vel);
 
 		// set up the filter
 		// (assume it is constant for the duration)
