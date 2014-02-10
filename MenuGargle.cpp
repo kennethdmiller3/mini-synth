@@ -15,7 +15,6 @@ namespace Menu
 
 	void Gargle::Update(int index, int sign, DWORD modifiers)
 	{
-		float value;
 		switch (index)
 		{
 		case TITLE:

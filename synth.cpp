@@ -364,7 +364,7 @@ void __cdecl main(int argc, char **argv)
 
 	// initialize to middle c
 	note_most_recent = 60;
-	voice_note[voice_most_recent] = note_most_recent;
+	voice_note[voice_most_recent] = unsigned char(note_most_recent);
 
 	// initialize key display
 	InitKeyVolumeEnvelopeDisplay(hOut);
