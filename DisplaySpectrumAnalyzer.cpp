@@ -9,17 +9,19 @@ Spectrum Analyzer Display
 #include "DisplaySpectrumAnalyzer.h"
 #include "Math.h"
 
-static HSTREAM sliding_stream;
-static HDSP collect_samples;
-
+// fast fourier transform properties
 #define FFT_TYPE 5
-
 static int const SCALE = 128;
 static int const FFT_SIZE = 256 << FFT_TYPE;
 static int const FREQUENCY_BINS = FFT_SIZE / 2;
 
+// sliding sample buffer stream
+static CRITICAL_SECTION cs;
+static HSTREAM sliding_stream;
+static HDSP collect_samples;
+
 // sliding sample buffer for use by the FFT
-float sliding_buffer[FFT_SIZE];
+static float sliding_buffer[FFT_SIZE];
 
 // frequency constants
 static float const semitone = 1.0594630943592952645618252949463f;	//powf(2.0f, 1.0f / 12.0f);
@@ -40,35 +42,58 @@ static CHAR_INFO const bar_nyquist = { 0, BACKGROUND_RED };
 // add data from the audio stream to the sliding sample buffer
 static void CALLBACK AppendDataToSlidingBuffer(HDSP handle, DWORD channel, float *buffer, DWORD length, void *user)
 {
+	// enter critical section for the sliding buffer
+	EnterCriticalSection(&cs);
+
+	// stereo sample count
 	unsigned int count = length / (2 * sizeof(float));
 	if (count < FFT_SIZE)
 	{
-		// shift sample data down and add new data to the end,
+		// shift sample data down
 		memmove(sliding_buffer, sliding_buffer + count, (FFT_SIZE - count) * sizeof(float));
 	}
 	else if (count > FFT_SIZE)
 	{
-		// use the last FFT_SIZE sliding_buffer
+		// use the last FFT_SIZE samples
 		buffer += (count - FFT_SIZE) * 2;
 		count = FFT_SIZE;
 	}
 
-	// combine stereo sliding_buffer into mono for analysis
+	// add new data to the end of the sliding buffer
+	// converting to mono samples for analysis
 	for (unsigned int i = 0; i < count; ++i)
 	{
 		sliding_buffer[FFT_SIZE - count + i] = 0.5f * (buffer[i + i] + buffer[i + i + 1]);
 	}
+
+	// done 
+	LeaveCriticalSection(&cs);
 }
 
 // get data from the sliding sample buffer
 static DWORD CALLBACK GetDataFromSlidingBuffer(HSTREAM handle, void *buffer, DWORD length, void *user)
 {
+	// enter critical section for the sliding buffer
+	EnterCriticalSection(&cs);
+
+	// limit length to that of the sliding buffer
+	length = Min(length, DWORD(FFT_SIZE * sizeof(float)));
+
+	// copy the latest data from the sliding buffer
 	memcpy(buffer, (char *)sliding_buffer + FFT_SIZE * sizeof(float) - length, length);
+
+	// done
+	LeaveCriticalSection(&cs);
+
+	// return the requested amount of data
 	return length;
 }
 
 void InitSpectrumAnalyzer(DWORD stream, BASS_INFO const &info)
 {
+	// create a critical section
+	InitializeCriticalSection(&cs);
+
 	// add a channel DSP to collect samples
 	collect_samples = BASS_ChannelSetDSP(stream, (DSPPROC *)AppendDataToSlidingBuffer, NULL, -1);
 
@@ -83,6 +108,9 @@ void CleanupSpectrumAnalyzer(DWORD stream)
 
 	// free the data stream
 	BASS_StreamFree(sliding_stream);
+
+	// free the critical section
+	DeleteCriticalSection(&cs);
 }
 
 // SPECTRUM ANALYZER
