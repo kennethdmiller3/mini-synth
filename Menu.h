@@ -37,6 +37,7 @@ namespace Menu
 		int count;
 	};
 	extern PageInfo const page_info[];
+	extern COORD const page_pos;
 
 	// menu attributes
 	extern WORD const title_attrib[2][3];

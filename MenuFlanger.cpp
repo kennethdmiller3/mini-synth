@@ -10,7 +10,7 @@ namespace Menu
 	static const char * const waveform[] = { "Triangle", "Sine" };
 	static const char * const phase[] = { "-180", "-90", "0", "90", "180" };
 
-	Flanger menu_fx_flanger({ 1, 21 }, "F5 FLANGER", Flanger::COUNT);
+	Flanger menu_fx_flanger({ 1, page_pos.Y + 9 }, "F5 FLANGER", Flanger::COUNT);
 
 	void Flanger::Update(int index, int sign, DWORD modifiers)
 	{

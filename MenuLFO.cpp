@@ -12,7 +12,7 @@ Low-Frequency Oscillator Menu
 
 namespace Menu
 {
-	LFO menu_lfo({ 41, 12 }, "F3 LFO", LFO::COUNT);
+	LFO menu_lfo({ 41, page_pos.Y }, "F3 LFO", LFO::COUNT);
 
 	void LFO::Update(int index, int sign, DWORD modifiers)
 	{

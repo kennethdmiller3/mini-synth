@@ -15,8 +15,8 @@ namespace Menu
 {
 	OSC menu_osc[NUM_OSCILLATORS] =
 	{
-		OSC(0, { 1, 12 }, "F1 OSC1", OSC::COUNT - 1),
-		OSC(1, { 21, 12 }, "F2 OSC2", OSC::COUNT),
+		OSC(0, { 1, page_pos.Y }, "F1 OSC1", OSC::COUNT - 1),
+		OSC(1, { 21, page_pos.Y }, "F2 OSC2", OSC::COUNT),
 	};
 
 	// oscillator menus

@@ -9,7 +9,7 @@ namespace Menu
 {
 	static const char * const waveform[] = { "Triangle", "Square" };
 
-	Gargle menu_fx_gargle({ 21, 21 }, "F6 GARGLE", Gargle::COUNT);
+	Gargle menu_fx_gargle({ 21, page_pos.Y + 9 }, "F6 GARGLE", Gargle::COUNT);
 
 	int rate_step[] = { 0, 1, 10, 100 };
 
