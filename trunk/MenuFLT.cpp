@@ -14,7 +14,7 @@ Filter Menu
 
 namespace Menu
 {
-	FLT menu_flt({ 61, 12 }, "F4 FLT", FLT::COUNT);
+	FLT menu_flt({ 61, page_pos.Y }, "F4 FLT", FLT::COUNT);
 
 	void FLT::Update(int index, int sign, DWORD modifiers)
 	{

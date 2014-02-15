@@ -7,7 +7,7 @@
 
 namespace Menu
 {
-	Distortion menu_fx_distortion({ 41, 12 }, "F3 DISTORT", Distortion::COUNT);
+	Distortion menu_fx_distortion({ 41, page_pos.Y }, "F3 DISTORT", Distortion::COUNT);
 
 	void Distortion::Update(int index, int sign, DWORD modifiers)
 	{

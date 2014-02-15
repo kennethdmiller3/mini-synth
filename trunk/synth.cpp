@@ -217,7 +217,8 @@ DWORD CALLBACK WriteStream(HSTREAM handle, float *buffer, DWORD length, void *us
 		// left and right channels are the same
 		//short const output = short(Clamp(int(sample * output_scale * 32768), SHRT_MIN, SHRT_MAX));
 		//short const output = short(FastTanh(sample * output_scale) * 32767);
-		float const output = FastTanh(sample * output_scale);
+		//float const output = FastTanh(sample * output_scale);
+		float const output = sample * output_scale;
 		*buffer++ = output;
 		*buffer++ = output;
 	}
@@ -230,7 +231,7 @@ DWORD CALLBACK WriteStream(HSTREAM handle, float *buffer, DWORD length, void *us
 
 void PrintOutputScale(HANDLE hOut)
 {
-	COORD const pos = { 1, 10 };
+	COORD const pos = { 1, SPECTRUM_HEIGHT + 2 };
 	PrintConsoleWithAttribute(hOut, { pos.X,     pos.Y }, FOREGROUND_RED | FOREGROUND_GREEN | FOREGROUND_BLUE | BACKGROUND_RED,  "-");
 	PrintConsoleWithAttribute(hOut, { pos.X + 2, pos.Y }, FOREGROUND_RED | FOREGROUND_GREEN | FOREGROUND_BLUE | BACKGROUND_BLUE, "+");
 	PrintConsole(hOut, { pos.X + 4, pos.Y }, "Output: %5.1f%%", output_scale * 100.0f);
@@ -238,7 +239,7 @@ void PrintOutputScale(HANDLE hOut)
 
 void PrintKeyOctave(HANDLE hOut)
 {
-	COORD const pos = { 21, 10 };
+	COORD const pos = { 21, SPECTRUM_HEIGHT + 2 };
 	PrintConsoleWithAttribute(hOut, { pos.X,     pos.Y }, FOREGROUND_RED | FOREGROUND_GREEN | FOREGROUND_BLUE | BACKGROUND_RED,  "[");
 	PrintConsoleWithAttribute(hOut, { pos.X + 2, pos.Y }, FOREGROUND_RED | FOREGROUND_GREEN | FOREGROUND_BLUE | BACKGROUND_BLUE, "]");
 	PrintConsole(hOut, { pos.X + 4, pos.Y }, "Key Octave: %d", keyboard_octave);
@@ -246,19 +247,19 @@ void PrintKeyOctave(HANDLE hOut)
 
 void PrintGoToMain(HANDLE hOut)
 {
-	COORD const pos = { 41, 10 };
+	COORD const pos = { 41, SPECTRUM_HEIGHT + 2 };
 	PrintConsole(hOut, pos, "F10 Go To Main    ");
 }
 
 void PrintGoToEffects(HANDLE hOut)
 {
-	COORD const pos = { 41, 10 };
+	COORD const pos = { 41, SPECTRUM_HEIGHT + 2 };
 	PrintConsole(hOut, pos, "F11 Go To Effects ");
 }
 
 void PrintAntialias(HANDLE hOut)
 {
-	COORD const pos = { 61, 10 };
+	COORD const pos = { 61, SPECTRUM_HEIGHT + 2 };
 	PrintConsole(hOut, pos, "F12 Antialias:");
 	if (use_antialias)
 		PrintConsoleWithAttribute(hOut, { pos.X + 15, pos.Y }, FOREGROUND_GREEN, " ON");

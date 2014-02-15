@@ -7,7 +7,7 @@
 
 namespace Menu
 {
-	Reverb menu_fx_reverb({ 61, 21 }, "F8 REVERB", Reverb::COUNT);
+	Reverb menu_fx_reverb({ 61, page_pos.Y + 9 }, "F8 REVERB", Reverb::COUNT);
 
 	void Reverb::Update(int index, int sign, DWORD modifiers)
 	{

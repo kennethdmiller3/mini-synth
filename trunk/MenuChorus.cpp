@@ -10,7 +10,7 @@ namespace Menu
 	static const char * const waveform[] = { "Triangle", "Sine" };
 	static const char * const phase[] = { "-180", "-90", "0", "90", "180" };
 
-	Chorus menu_fx_chorus({ 1, 12 }, "F1 CHORUS", Chorus::COUNT);
+	Chorus menu_fx_chorus({ 1, page_pos.Y }, "F1 CHORUS", Chorus::COUNT);
 
 	void Chorus::Update(int index, int sign, DWORD modifiers)
 	{

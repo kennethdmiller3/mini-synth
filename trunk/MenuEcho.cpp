@@ -7,7 +7,7 @@
 
 namespace Menu
 {
-	Echo menu_fx_echo({ 61, 12 }, "F4 ECHO", Echo::COUNT);
+	Echo menu_fx_echo({ 61, page_pos.Y }, "F4 ECHO", Echo::COUNT);
 
 	void Echo::Update(int index, int sign, DWORD modifiers)
 	{

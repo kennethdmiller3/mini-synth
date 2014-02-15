@@ -21,6 +21,7 @@ Menu Functions
 #include "MenuGargle.h"
 #include "MenuReverbI3D.h"
 #include "MenuReverb.h"
+#include "DisplaySpectrumAnalyzer.h"
 
 namespace Menu
 {
@@ -50,11 +51,14 @@ namespace Menu
 		{ menu_fx, ARRAY_SIZE(menu_fx) },
 	};
 
+	COORD const page_pos = { 0, SPECTRUM_HEIGHT + 4 };
+
 	// active page
 	Page active_page = PAGE_MAIN;
 
 	// active menu
 	int active_menu = MAIN_OSC1;
+	int save_menu[PAGE_COUNT];
 
 	// menu attributes
 	WORD const title_attrib[2][3] =
@@ -120,13 +124,17 @@ namespace Menu
 	void SetActivePage(HANDLE hOut, Page page)
 	{
 		// clear the area
-		static DWORD const size = (49 - 12) * 80;
-		static COORD const pos = { 0, 12 };
+		static DWORD const size = (49 - page_pos.Y) * 80;
 		DWORD written;
-		FillConsoleOutputCharacter(hOut, 0, size, pos, &written);
-		FillConsoleOutputAttribute(hOut, FOREGROUND_RED | FOREGROUND_GREEN | FOREGROUND_BLUE, size, pos, &written);
+		FillConsoleOutputCharacter(hOut, 0, size, page_pos, &written);
+		FillConsoleOutputAttribute(hOut, FOREGROUND_RED | FOREGROUND_GREEN | FOREGROUND_BLUE, size, page_pos, &written);
 
+		// switch pages
+		save_menu[active_page] = active_menu;
 		active_page = page;
+		active_menu = save_menu[active_page];
+
+		// print menus on the new page
 		for (int i = 0; i < page_info[page].count; ++i)
 			page_info[page].menu[i]->Print(hOut);
 	}
