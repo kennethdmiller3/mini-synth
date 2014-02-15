@@ -244,9 +244,21 @@ void PrintKeyOctave(HANDLE hOut)
 	PrintConsole(hOut, { pos.X + 4, pos.Y }, "Key Octave: %d", keyboard_octave);
 }
 
-void PrintAntialias(HANDLE hOut)
+void PrintGoToMain(HANDLE hOut)
 {
 	COORD const pos = { 41, 10 };
+	PrintConsole(hOut, pos, "F10 Go To Main    ");
+}
+
+void PrintGoToEffects(HANDLE hOut)
+{
+	COORD const pos = { 41, 10 };
+	PrintConsole(hOut, pos, "F11 Go To Effects ");
+}
+
+void PrintAntialias(HANDLE hOut)
+{
+	COORD const pos = { 61, 10 };
 	PrintConsole(hOut, pos, "F12 Antialias:");
 	if (use_antialias)
 		PrintConsoleWithAttribute(hOut, { pos.X + 15, pos.Y }, FOREGROUND_GREEN, " ON");
@@ -383,6 +395,7 @@ void __cdecl main(int argc, char **argv)
 	// show output scale and key octave
 	PrintOutputScale(hOut);
 	PrintKeyOctave(hOut);
+	PrintGoToEffects(hOut);
 	PrintAntialias(hOut);
 
 	// show main page
@@ -466,10 +479,12 @@ void __cdecl main(int argc, char **argv)
 					}
 					else if (code == VK_F10)
 					{
+						PrintGoToEffects(hOut);
 						Menu::SetActivePage(hOut, Menu::PAGE_MAIN);
 					}
 					else if (code == VK_F11)
 					{
+						PrintGoToMain(hOut);
 						Menu::SetActivePage(hOut, Menu::PAGE_FX);
 					}
 					else if (code == VK_TAB)
