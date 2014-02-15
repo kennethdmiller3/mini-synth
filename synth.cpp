@@ -300,15 +300,22 @@ void __cdecl main(int argc, char **argv)
 	SetConsoleMode(hIn, 0);
 
 	// 10ms update period
-	const int STREAM_UPDATE_PERIOD = 10;
+	const DWORD STREAM_UPDATE_PERIOD = 10;
 	BASS_SetConfig(BASS_CONFIG_UPDATEPERIOD, STREAM_UPDATE_PERIOD);
 
 	// initialize BASS sound library
-	if (!BASS_Init(-1, 48000, BASS_DEVICE_LATENCY, 0, NULL))
+	const DWORD STREAM_FREQUENCY = 48000;
+	if (!BASS_Init(-1, STREAM_FREQUENCY, BASS_DEVICE_LATENCY, 0, NULL))
 		Error("Can't initialize device");
 
 	// get device info
 	BASS_GetInfo(&info);
+
+	// if the device's output rate is unknown default to stream frequency
+	if (!info.freq) info.freq = STREAM_FREQUENCY;
+
+	// debug print info
+	DebugPrint("frequency: %d (min %d, max %d)\n", info.freq, info.minrate, info.maxrate);
 	DebugPrint("device latency: %dms\n", info.latency);
 	DebugPrint("device minbuf: %dms\n", info.minbuf);
 	DebugPrint("ds version: %d (effects %s)\n", info.dsver, info.dsver < 8 ? "disabled" : "enabled");
@@ -316,9 +323,6 @@ void __cdecl main(int argc, char **argv)
 	// default buffer size = update period + 'minbuf' + 1ms extra margin
 	BASS_SetConfig(BASS_CONFIG_BUFFER, STREAM_UPDATE_PERIOD + info.minbuf + 1);
 	DebugPrint("using a %dms buffer\r", BASS_GetConfig(BASS_CONFIG_BUFFER));
-
-	// if the device's output rate is unknown default to 44100 Hz
-	if (!info.freq) info.freq = 44100;
 
 	// create a stream, stereo so that effects sound nice
 	stream = BASS_StreamCreate(info.freq, 2, BASS_SAMPLE_FLOAT, (STREAMPROC*)WriteStream, 0);
@@ -369,6 +373,9 @@ void __cdecl main(int argc, char **argv)
 	// initialize to middle c
 	note_most_recent = 60;
 	voice_note[voice_most_recent] = unsigned char(note_most_recent);
+
+	// initialize spectrum analyzer
+	InitSpectrumAnalyzer(stream, info);
 
 	// initialize key display
 	InitKeyVolumeEnvelopeDisplay(hOut);
@@ -549,6 +556,9 @@ void __cdecl main(int argc, char **argv)
 		Midi::Input::Stop();
 		Midi::Input::Close();
 	}
+
+	// clean up spectrum analyzer
+	CleanupSpectrumAnalyzer(stream);
 
 	// clear the window
 	Clear(hOut);

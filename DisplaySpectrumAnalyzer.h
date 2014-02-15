@@ -9,4 +9,6 @@ Spectrum Analyzer Display
 #define SPECTRUM_WIDTH 80
 #define SPECTRUM_HEIGHT 8
 
+void InitSpectrumAnalyzer(DWORD stream, BASS_INFO const &info);
+void CleanupSpectrumAnalyzer(DWORD stream);
 void UpdateSpectrumAnalyzer(HANDLE hOut, DWORD stream, BASS_INFO const &info, float const freq_min);
