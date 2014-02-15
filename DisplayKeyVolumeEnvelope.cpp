@@ -51,9 +51,12 @@ void UpdateKeyVolumeEnvelopeDisplay(HANDLE hOut)
 	{
 		EnvelopeState::State const state = amp_env_state[v].state;
 		WORD const attrib = env_attrib[state];
-		int const x = key_pos.X - keyboard_octave * 12 + voice_note[v];
-		if (x >= 0 && x < SPECTRUM_WIDTH)
-			note_env_attrib[x] = attrib;
+		if (state != EnvelopeState::OFF)
+		{
+			int const x = key_pos.X - keyboard_octave * 12 + voice_note[v];
+			if (x >= 0 && x < SPECTRUM_WIDTH)
+				note_env_attrib[x] = attrib;
+		}
 		voice_env_attrib[v] = attrib;
 	}
 
