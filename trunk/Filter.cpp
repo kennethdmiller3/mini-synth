@@ -43,7 +43,7 @@ float CubicSaturate(float const x)
 static float const GAIN_COMPENSATION = 0.5f;
 
 // filter configuration
-FilterConfig flt_config(false, FilterConfig::LOWPASS_4, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f);
+FilterConfig flt_config(false, FilterConfig::LOWPASS_4, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f);
 
 // filter envelope config
 EnvelopeConfig flt_env_config(false, 0.0f, 1.0f, 0.0f, 0.1f);
@@ -302,6 +302,9 @@ void FilterState::Setup(float const cutoff, float const resonance, float const s
 // update the filter
 float FilterState::Update(FilterConfig const &config, float const input)
 {
+	// input with drive and gain compensation
+	float const input_adjusted = config.drive * (input + input * feedback * GAIN_COMPENSATION);
+
 #if FILTER == FILTER_IMPROVED_MOOG
 
 #if FILTER_OVERSAMPLE > 1
@@ -310,9 +313,9 @@ float FilterState::Update(FilterConfig const &config, float const input)
 	{
 		// nonlinear feedback with gain compensation
 #if SATURATE == SATURATE_INPUT
-		float const in = Saturate(input - feedback * (y[4] - GAIN_COMPENSATION * input));
+		float const in = Saturate(input_adjusted - feedback * y[4]);
 #else
-		float const in = input - feedback * (Saturate(y[4]) - GAIN_COMPENSATION * input);
+		float const in = input_adjusted - feedback * Saturate(y[4]);
 #endif
 
 		// stage 1: x1[n-1] = x1[n]; x1[n] = in;    y1[n-1] = y1[n]; y1[n] = func(y1[n-1], x1[n], x1[n-1])
@@ -353,9 +356,9 @@ float FilterState::Update(FilterConfig const &config, float const input)
 
 		// nonlinear feedback with gain compensation
 #if SATURATE == SATURATE_INPUT
-		y[0] = Saturate(input - feedback * (delayed - GAIN_COMPENSATION * input));
+		y[0] = Saturate(input_adjusted - feedback * delayed);
 #else
-		y[0] = input - feedback * (Saturate(delayed) - GAIN_COMPENSATION * input);
+		y[0] = input_adjusted - feedback * Saturate(delayed);
 #endif
 
 		// four-pole low-pass filter
@@ -378,8 +381,7 @@ float FilterState::Update(FilterConfig const &config, float const input)
 		previous = y[4];
 
 		// nonlinear feedback with gain compensation
-		float const GAIN_COMPENSATION = 0.5f;
-		y[0] = input - feedback * (delayed - GAIN_COMPENSATION * input);
+		y[0] = input_adjusted - feedback * delayed;
 		z[0] = FastTanh(y[0] * 0.8192f);
 
 		// nonlinear four-pole low-pass filter
@@ -398,9 +400,9 @@ float FilterState::Update(FilterConfig const &config, float const input)
 	// nonlinear feedback with gain compensation
 	float const S = (((z[0] * G + z[1]) * G + z[2]) * G + z[3]) * inv1g;
 #if SATURATE == SATURATE_INPUT
-	y[0] = Saturate(alpha0 * (input - feedback * (S - GAIN_COMPENSATION * input)));
+	y[0] = Saturate(alpha0 * (input_adjusted - feedback * S));
 #else
-	y[0] = alpha0 * (input - feedback * (Saturate(S) - GAIN_COMPENSATION * input));
+	y[0] = alpha0 * (input_adjusted - feedback * Saturate(S));
 #endif
 
 	// four-pole low-pass filter
