@@ -146,6 +146,7 @@
     <ClCompile Include="Console.cpp" />
     <ClCompile Include="Control.cpp" />
     <ClCompile Include="Debug.cpp" />
+    <ClCompile Include="DisplayFilterFrequency.cpp" />
     <ClCompile Include="DisplayKeyVolumeEnvelope.cpp" />
     <ClCompile Include="DisplayLowFrequencyOscillator.cpp" />
     <ClCompile Include="DisplayOscillatorFrequency.cpp" />
@@ -196,6 +197,7 @@
     <ClInclude Include="Console.h" />
     <ClInclude Include="Control.h" />
     <ClInclude Include="Debug.h" />
+    <ClInclude Include="DisplayFilterFrequency.h" />
     <ClInclude Include="DisplayKeyVolumeEnvelope.h" />
     <ClInclude Include="DisplayLowFrequencyOscillator.h" />
     <ClInclude Include="DisplayOscillatorFrequency.h" />

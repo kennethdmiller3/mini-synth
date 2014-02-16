@@ -70,7 +70,7 @@ namespace Menu
 		switch (index)
 		{
 		case TITLE:
-			PrintTitle(hOut, flt_config.enable, flags, " ON", "OFF");
+			PrintTitle(hOut, flt_config.enable, flags, NULL, "OFF");
 			break;
 		case MODE:
 			PrintItemString(hOut, pos, flags, "%-18s", filter_name[flt_config.mode]);

@@ -28,6 +28,7 @@ Copyright 2014 Kenneth D. Miller III
 #include "DisplayKeyVolumeEnvelope.h"
 #include "DisplayOscillatorWaveform.h"
 #include "DisplayOscillatorFrequency.h"
+#include "DisplayFilterFrequency.h"
 #include "DisplayLowFrequencyOscillator.h"
 
 BASS_INFO info;
@@ -555,8 +556,12 @@ void __cdecl main(int argc, char **argv)
 					UpdateOscillatorFrequencyDisplay(hOut, voice_most_recent, o);
 			}
 
-			// update the low-frequency oscillator dispaly
+			// update the low-frequency oscillator display
 			UpdateLowFrequencyOscillatorDisplay(hOut);
+
+			// update the filter frequency display
+			if (flt_config.enable)
+				UpdateFilterFrequencyDisplay(hOut, voice_most_recent);
 		}
 
 		// show CPU usage
