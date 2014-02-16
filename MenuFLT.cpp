@@ -27,6 +27,9 @@ namespace Menu
 		case MODE:
 			flt_config.SetMode(FilterConfig::Mode((flt_config.mode + FilterConfig::COUNT + sign) % FilterConfig::COUNT));
 			break;
+		case DRIVE:
+			UpdatePercentageProperty(flt_config.drive, sign, modifiers, 0, 10);
+			break;
 		case RESONANCE:
 			UpdatePercentageProperty(flt_config.resonance, sign, modifiers, 0, 4);
 			break;
@@ -75,8 +78,11 @@ namespace Menu
 		case MODE:
 			PrintItemString(hOut, pos, flags, "%-18s", filter_name[flt_config.mode]);
 			break;
+		case DRIVE:
+			PrintItemFloat(hOut, pos, flags, "Drive:    % 7.1f%%", flt_config.drive * 100.0f);
+			break;
 		case RESONANCE:
-			PrintItemFloat(hOut, pos, flags, "Resonance: % 7.3f", flt_config.resonance);
+			PrintItemFloat(hOut, pos, flags, "Resonance:% 7.1f%%", flt_config.resonance * 100.0f);
 			break;
 		case CUTOFF_BASE:
 			PrintItemFloat(hOut, pos, flags, "Cutoff:    % 7.2f", flt_config.cutoff_base * 12.0f);

@@ -17,6 +17,7 @@ namespace Menu
 		{
 			TITLE,
 			MODE,
+			DRIVE,
 			RESONANCE,
 			CUTOFF_BASE,
 			CUTOFF_LFO,
