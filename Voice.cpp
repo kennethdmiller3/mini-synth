@@ -91,6 +91,14 @@ int NoteOn(int note, int velocity)
 	// start the filter
 	flt_state[voice].Reset();
 
+	// if the volume envelope is off, reset the filter envelope
+	// (it should be free-running instead)
+	if (amp_env_state[voice].state == EnvelopeState::OFF)
+	{
+		flt_env_state[voice].state = EnvelopeState::OFF;
+		flt_env_state[voice].amplitude = 0;
+	}
+
 	// gate the volume envelope
 	amp_env_state[voice].Gate(amp_env_config, true);
 
