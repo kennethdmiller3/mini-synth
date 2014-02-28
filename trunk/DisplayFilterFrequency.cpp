@@ -16,7 +16,7 @@ Filter Frequency Display
 #include "Filter.h"
 
 // show filter frequency
-void UpdateFilterFrequencyDisplay(HANDLE hOut, int const v)
+void DisplayFilterFrequency::Update(HANDLE hOut, int const v)
 {
 	// get low-frequency filter value
 	// (assume it is constant for the duration)

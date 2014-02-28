@@ -388,11 +388,18 @@ void __cdecl main(int argc, char **argv)
 	note_most_recent = 60;
 	voice_note[voice_most_recent] = unsigned char(note_most_recent);
 
+	DisplaySpectrumAnalyzer displaySpectrumAnalyzer;
+	DisplayKeyVolumeEnvelope displayKeyVolumeEnvelope;
+	DisplayOscillatorWaveform displayOscillatorWaveform;
+	DisplayOscillatorFrequency displayOscillatorFrequency;
+	DisplayLowFrequencyOscillator displayLowFrequencyOscillator;
+	DisplayFilterFrequency displayFilterFrequency;
+
 	// initialize spectrum analyzer
-	InitSpectrumAnalyzer(stream, info);
+	displaySpectrumAnalyzer.Init(stream, info);
 
 	// initialize key display
-	InitKeyVolumeEnvelopeDisplay(hOut);
+	displayKeyVolumeEnvelope.Init(hOut);
 
 	// show output scale and key octave
 	PrintOutputScale(hOut);
@@ -539,29 +546,29 @@ void __cdecl main(int argc, char **argv)
 		float const freq_min = powf(2, float(keyboard_octave - 6)) * middle_c_frequency;
 
 		// update the spectrum analyzer display
-		UpdateSpectrumAnalyzer(hOut, stream, info, freq_min);
+		displaySpectrumAnalyzer.Update(hOut, stream, info, freq_min);
 
 		// update note key volume envelope display
-		UpdateKeyVolumeEnvelopeDisplay(hOut);
+		displayKeyVolumeEnvelope.Update(hOut);
 
 		if (Menu::active_page == Menu::PAGE_MAIN)
 		{
 			// update the oscillator waveform display
-			UpdateOscillatorWaveformDisplay(hOut, info, voice_most_recent);
+			displayOscillatorWaveform.Update(hOut, info, voice_most_recent);
 
 			// update the oscillator frequency displays
 			for (int o = 0; o < NUM_OSCILLATORS; ++o)
 			{
 				if (osc_config[o].enable)
-					UpdateOscillatorFrequencyDisplay(hOut, voice_most_recent, o);
+					displayOscillatorFrequency.Update(hOut, voice_most_recent, o);
 			}
 
 			// update the low-frequency oscillator display
-			UpdateLowFrequencyOscillatorDisplay(hOut);
+			displayLowFrequencyOscillator.Update(hOut);
 
 			// update the filter frequency display
 			if (flt_config.enable)
-				UpdateFilterFrequencyDisplay(hOut, voice_most_recent);
+				displayFilterFrequency.Update(hOut, voice_most_recent);
 		}
 
 		// show CPU usage
@@ -579,7 +586,7 @@ void __cdecl main(int argc, char **argv)
 	}
 
 	// clean up spectrum analyzer
-	CleanupSpectrumAnalyzer(stream);
+	displaySpectrumAnalyzer.Cleanup(stream);
 
 	// clear the window
 	Clear(hOut);

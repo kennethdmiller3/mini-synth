@@ -15,7 +15,7 @@ Oscillator Frequency Display
 #include "OscillatorNote.h"
 
 // show oscillator frequency
-void UpdateOscillatorFrequencyDisplay(HANDLE hOut, int const v, int const o)
+void DisplayOscillatorFrequency::Update(HANDLE hOut, int const v, int const o)
 {
 	// oscillator key frequency (taking key follow and pitch wheel control into account)
 	float const osc_key_freq = NoteFrequency(voice_note[v], osc_config[o].key_follow);

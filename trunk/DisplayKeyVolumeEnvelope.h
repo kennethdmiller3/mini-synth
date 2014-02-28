@@ -8,5 +8,9 @@ Per-Key Volume Envelope Display
 
 #include "Envelope.h"
 
-void InitKeyVolumeEnvelopeDisplay(HANDLE hOut);
-void UpdateKeyVolumeEnvelopeDisplay(HANDLE hOut);
+class DisplayKeyVolumeEnvelope
+{
+public:
+	void Init(HANDLE hOut);
+	void Update(HANDLE hOut);
+};

@@ -6,4 +6,8 @@ Copyright 2014 Kenneth D. Miller III
 Filter Frequency Display
 */
 
-extern void UpdateFilterFrequencyDisplay(HANDLE hOut, int const v);
+class DisplayFilterFrequency
+{
+public:
+	void Update(HANDLE hOut, int const v);
+};

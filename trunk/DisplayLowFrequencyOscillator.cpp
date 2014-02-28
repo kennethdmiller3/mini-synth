@@ -21,7 +21,7 @@ static CHAR_INFO const negative = { 0, BACKGROUND_RED | FOREGROUND_RED | FOREGRO
 static CHAR_INFO const positive = { 0, BACKGROUND_GREEN | FOREGROUND_RED | FOREGROUND_GREEN | FOREGROUND_BLUE };
 static WORD const plot[2] = { 221, 222 };
 
-void UpdateLowFrequencyOscillatorDisplay(HANDLE hOut)
+void DisplayLowFrequencyOscillator::Update(HANDLE hOut)
 {
 	// initialize buffer
 	CHAR_INFO buf[18];
