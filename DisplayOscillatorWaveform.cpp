@@ -31,21 +31,14 @@ static CHAR_INFO const plot[2] = {
 static COORD const pos = { 0, 0 };
 static COORD const size = { WAVEFORM_WIDTH, WAVEFORM_HEIGHT };
 
-// local filter for plot
-static FilterState filter;
-
-// detect when to reset the filter
-static bool prev_active;
-static int prev_v;
-
-// previous frame time
-static DWORD prevTime = timeGetTime();
-
-// leftover cycles
-static float cyclesLeftOver;
+// initialization
+void DisplayOscillatorWaveform::Init()
+{
+	prevTime = timeGetTime();
+}
 
 // get oscillator value
-static float UpdateOscillatorOutput(NoteOscillatorConfig const config[], OscillatorState state[], float step[], float delta[])
+float DisplayOscillatorWaveform::UpdateOscillatorOutput(NoteOscillatorConfig const config[])
 {
 	float value = 0.0f;
 	for (int o = 0; o < NUM_OSCILLATORS; ++o)
@@ -61,7 +54,7 @@ static float UpdateOscillatorOutput(NoteOscillatorConfig const config[], Oscilla
 }
 
 // get one waveform step
-static float UpdateWaveformStep(int oversample, NoteOscillatorConfig const config[], OscillatorState state[], float step[], float delta[], FilterState &filter)
+float DisplayOscillatorWaveform::UpdateWaveformStep(int oversample, NoteOscillatorConfig const config[])
 {
 	if (flt_config.enable)
 	{
@@ -69,18 +62,18 @@ static float UpdateWaveformStep(int oversample, NoteOscillatorConfig const confi
 		float value = 0;
 		for (int i = 0; i < oversample; ++i)
 		{
-			value += filter.Update(flt_config, UpdateOscillatorOutput(config, state, step, delta));
+			value += filter.Update(flt_config, UpdateOscillatorOutput(config));
 		}
 		return value / oversample;
 	}
 	else
 	{
-		return UpdateOscillatorOutput(config, state, step, delta);
+		return UpdateOscillatorOutput(config);
 	}
 }
 
 // waveform display settings
-void UpdateOscillatorWaveformDisplay(HANDLE hOut, BASS_INFO const &info, int const v)
+void DisplayOscillatorWaveform::Update(HANDLE hOut, BASS_INFO const &info, int const v)
 {
 	// display region
 	SMALL_RECT region = { 0, 49 - WAVEFORM_HEIGHT, WAVEFORM_WIDTH - 1, 48 };
@@ -123,12 +116,7 @@ void UpdateOscillatorWaveformDisplay(HANDLE hOut, BASS_INFO const &info, int con
 	// base phase step for plot
 	float const step_base = cycle / float(WAVEFORM_WIDTH * oversample);
 
-	// local oscillator state for plot
-	OscillatorState state[NUM_OSCILLATORS];
-
 	// compute phase steps and deltas for each oscillator
-	float step[NUM_OSCILLATORS];
-	float delta[NUM_OSCILLATORS];
 	for (int o = 0; o < NUM_OSCILLATORS; ++o)
 	{
 		// step and delta phase
@@ -205,7 +193,7 @@ void UpdateOscillatorWaveformDisplay(HANDLE hOut, BASS_INFO const &info, int con
 			// run oscillators and filters forward
 			for (int x = 0; x < steps; ++x)
 			{
-				UpdateWaveformStep(oversample, config, state, step, delta, filter);
+				UpdateWaveformStep(oversample, config);
 			}
 		}
 	}
@@ -231,7 +219,7 @@ void UpdateOscillatorWaveformDisplay(HANDLE hOut, BASS_INFO const &info, int con
 	for (int x = 0; x < WAVEFORM_WIDTH; ++x)
 	{
 		// sum the oscillator outputs
-		float const value = amp_env_amplitude * UpdateWaveformStep(oversample, config, state, step, delta, filter);
+		float const value = amp_env_amplitude * UpdateWaveformStep(oversample, config);
 
 		// plot waveform column
 		int grid_y = FloorInt(-(WAVEFORM_HEIGHT - 0.5f) * value);

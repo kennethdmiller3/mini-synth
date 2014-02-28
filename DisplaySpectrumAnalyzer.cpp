@@ -9,20 +9,6 @@ Spectrum Analyzer Display
 #include "DisplaySpectrumAnalyzer.h"
 #include "Math.h"
 
-// fast fourier transform properties
-#define FFT_TYPE 5
-static int const SCALE = 128;
-static int const FFT_SIZE = 256 << FFT_TYPE;
-static int const FREQUENCY_BINS = FFT_SIZE / 2;
-
-// sliding sample buffer stream
-static CRITICAL_SECTION cs;
-static HSTREAM sliding_stream;
-static HDSP collect_samples;
-
-// sliding sample buffer for use by the FFT
-static float sliding_buffer[FFT_SIZE];
-
 // frequency constants
 static float const semitone = 1.0594630943592952645618252949463f;	//powf(2.0f, 1.0f / 12.0f);
 static float const quartertone = 0.97153194115360586874328941582127f;	//1/sqrtf(semitone)
@@ -40,17 +26,17 @@ static CHAR_INFO const bar_empty = { 0, BACKGROUND_BLUE };
 static CHAR_INFO const bar_nyquist = { 0, BACKGROUND_RED };
 
 // add data from the audio stream to the sliding sample buffer
-static void CALLBACK AppendDataToSlidingBuffer(HDSP handle, DWORD channel, float *buffer, DWORD length, void *user)
+void CALLBACK DisplaySpectrumAnalyzer::AppendDataToSlidingBuffer(HDSP handle, DWORD channel, float *buffer, DWORD length, DisplaySpectrumAnalyzer *user)
 {
 	// enter critical section for the sliding buffer
-	EnterCriticalSection(&cs);
+	EnterCriticalSection(&user->cs);
 
 	// stereo sample count
 	unsigned int count = length / (2 * sizeof(float));
 	if (count < FFT_SIZE)
 	{
 		// shift sample data down
-		memmove(sliding_buffer, sliding_buffer + count, (FFT_SIZE - count) * sizeof(float));
+		memmove(user->sliding_buffer, user->sliding_buffer + count, (FFT_SIZE - count) * sizeof(float));
 	}
 	else if (count > FFT_SIZE)
 	{
@@ -63,45 +49,48 @@ static void CALLBACK AppendDataToSlidingBuffer(HDSP handle, DWORD channel, float
 	// converting to mono samples for analysis
 	for (unsigned int i = 0; i < count; ++i)
 	{
-		sliding_buffer[FFT_SIZE - count + i] = 0.5f * (buffer[i + i] + buffer[i + i + 1]);
+		user->sliding_buffer[FFT_SIZE - count + i] = 0.5f * (buffer[i + i] + buffer[i + i + 1]);
 	}
 
 	// done 
-	LeaveCriticalSection(&cs);
+	LeaveCriticalSection(&user->cs);
 }
 
 // get data from the sliding sample buffer
-static DWORD CALLBACK GetDataFromSlidingBuffer(HSTREAM handle, void *buffer, DWORD length, void *user)
+DWORD CALLBACK DisplaySpectrumAnalyzer::GetDataFromSlidingBuffer(HSTREAM handle, void *buffer, DWORD length, DisplaySpectrumAnalyzer *user)
 {
 	// enter critical section for the sliding buffer
-	EnterCriticalSection(&cs);
+	EnterCriticalSection(&user->cs);
 
 	// limit length to that of the sliding buffer
 	length = Min(length, DWORD(FFT_SIZE * sizeof(float)));
 
 	// copy the latest data from the sliding buffer
-	memcpy(buffer, (char *)sliding_buffer + FFT_SIZE * sizeof(float) - length, length);
+	memcpy(buffer, (char *)user->sliding_buffer + FFT_SIZE * sizeof(float)-length, length);
 
 	// done
-	LeaveCriticalSection(&cs);
+	LeaveCriticalSection(&user->cs);
 
 	// return the requested amount of data
 	return length;
 }
 
-void InitSpectrumAnalyzer(DWORD stream, BASS_INFO const &info)
+void DisplaySpectrumAnalyzer::Init(DWORD stream, BASS_INFO const &info)
 {
+	// clear sliding buffer
+	memset(sliding_buffer, 0, sizeof(sliding_buffer));
+
 	// create a critical section
 	InitializeCriticalSection(&cs);
 
 	// add a channel DSP to collect samples
-	collect_samples = BASS_ChannelSetDSP(stream, (DSPPROC *)AppendDataToSlidingBuffer, NULL, -1);
+	collect_samples = BASS_ChannelSetDSP(stream, (DSPPROC *)AppendDataToSlidingBuffer, this, -1);
 
 	// create a data stream to return data from the sliding buffer
-	sliding_stream = BASS_StreamCreate(info.freq, 1, BASS_SAMPLE_FLOAT | BASS_STREAM_DECODE, GetDataFromSlidingBuffer, NULL);
+	sliding_stream = BASS_StreamCreate(info.freq, 1, BASS_SAMPLE_FLOAT | BASS_STREAM_DECODE, (STREAMPROC *)GetDataFromSlidingBuffer, this);
 }
 
-void CleanupSpectrumAnalyzer(DWORD stream)
+void DisplaySpectrumAnalyzer::Cleanup(DWORD stream)
 {
 	// remove the channel DSP
 	BASS_ChannelRemoveDSP(stream, collect_samples);
@@ -116,7 +105,7 @@ void CleanupSpectrumAnalyzer(DWORD stream)
 // SPECTRUM ANALYZER
 // horizontal axis shows semitone frequency bands
 // vertical axis shows logarithmic power
-void UpdateSpectrumAnalyzer(HANDLE hOut, DWORD stream, BASS_INFO const &info, float const freq_min)
+void DisplaySpectrumAnalyzer::Update(HANDLE hOut, DWORD stream, BASS_INFO const &info, float const freq_min)
 {
 	// get complex FFT data from the sliding buffer
 	float fft[FREQUENCY_BINS * 2][2];

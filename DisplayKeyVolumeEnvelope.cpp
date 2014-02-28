@@ -27,7 +27,7 @@ static WORD const env_attrib[EnvelopeState::COUNT] =
 	BACKGROUND_INTENSITY,									// EnvelopeState::RELEASE,
 };
 
-void InitKeyVolumeEnvelopeDisplay(HANDLE hOut)
+void DisplayKeyVolumeEnvelope::Init(HANDLE hOut)
 {
 	// show the note keys
 	DWORD written;
@@ -41,7 +41,7 @@ void InitKeyVolumeEnvelopeDisplay(HANDLE hOut)
 }
 
 
-void UpdateKeyVolumeEnvelopeDisplay(HANDLE hOut)
+void DisplayKeyVolumeEnvelope::Update(HANDLE hOut)
 {
 	WORD note_env_attrib[SPECTRUM_WIDTH];
 	WORD voice_env_attrib[VOICES];

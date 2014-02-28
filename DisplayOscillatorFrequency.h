@@ -6,4 +6,8 @@ Copyright 2014 Kenneth D. Miller III
 Oscillator Frequency Display
 */
 
-extern void UpdateOscillatorFrequencyDisplay(HANDLE hOut, int const v, int const o);
+class DisplayOscillatorFrequency
+{
+public:
+	void Update(HANDLE hOut, int const v, int const o);
+};
