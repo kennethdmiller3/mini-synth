@@ -1,0 +1,297 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <ClCompile Include="StdAfx.cpp" />
+    <ClCompile Include="synth.cpp" />
+    <ClCompile Include="DisplayFilterFrequency.cpp">
+      <Filter>Display</Filter>
+    </ClCompile>
+    <ClCompile Include="DisplayKeyVolumeEnvelope.cpp">
+      <Filter>Display</Filter>
+    </ClCompile>
+    <ClCompile Include="DisplayLowFrequencyOscillator.cpp">
+      <Filter>Display</Filter>
+    </ClCompile>
+    <ClCompile Include="DisplayOscillatorFrequency.cpp">
+      <Filter>Display</Filter>
+    </ClCompile>
+    <ClCompile Include="DisplayOscillatorWaveform.cpp">
+      <Filter>Display</Filter>
+    </ClCompile>
+    <ClCompile Include="DisplaySpectrumAnalyzer.cpp">
+      <Filter>Display</Filter>
+    </ClCompile>
+    <ClCompile Include="Menu.cpp">
+      <Filter>Menu</Filter>
+    </ClCompile>
+    <ClCompile Include="MenuAMP.cpp">
+      <Filter>Menu\Main</Filter>
+    </ClCompile>
+    <ClCompile Include="MenuFLT.cpp">
+      <Filter>Menu\Main</Filter>
+    </ClCompile>
+    <ClCompile Include="MenuLFO.cpp">
+      <Filter>Menu\Main</Filter>
+    </ClCompile>
+    <ClCompile Include="MenuOSC.cpp">
+      <Filter>Menu\Main</Filter>
+    </ClCompile>
+    <ClCompile Include="MenuChorus.cpp">
+      <Filter>Menu\Effect</Filter>
+    </ClCompile>
+    <ClCompile Include="MenuCompressor.cpp">
+      <Filter>Menu\Effect</Filter>
+    </ClCompile>
+    <ClCompile Include="MenuDistortion.cpp">
+      <Filter>Menu\Effect</Filter>
+    </ClCompile>
+    <ClCompile Include="MenuEcho.cpp">
+      <Filter>Menu\Effect</Filter>
+    </ClCompile>
+    <ClCompile Include="MenuFlanger.cpp">
+      <Filter>Menu\Effect</Filter>
+    </ClCompile>
+    <ClCompile Include="MenuGargle.cpp">
+      <Filter>Menu\Effect</Filter>
+    </ClCompile>
+    <ClCompile Include="MenuReverb.cpp">
+      <Filter>Menu\Effect</Filter>
+    </ClCompile>
+    <ClCompile Include="MenuReverbI3D.cpp">
+      <Filter>Menu\Effect</Filter>
+    </ClCompile>
+    <ClCompile Include="Amplifier.cpp">
+      <Filter>Synthesis</Filter>
+    </ClCompile>
+    <ClCompile Include="Envelope.cpp">
+      <Filter>Synthesis</Filter>
+    </ClCompile>
+    <ClCompile Include="Filter.cpp">
+      <Filter>Synthesis</Filter>
+    </ClCompile>
+    <ClCompile Include="Oscillator.cpp">
+      <Filter>Synthesis</Filter>
+    </ClCompile>
+    <ClCompile Include="OscillatorLFO.cpp">
+      <Filter>Synthesis</Filter>
+    </ClCompile>
+    <ClCompile Include="OscillatorNote.cpp">
+      <Filter>Synthesis</Filter>
+    </ClCompile>
+    <ClCompile Include="SubOscillator.cpp">
+      <Filter>Synthesis</Filter>
+    </ClCompile>
+    <ClCompile Include="Voice.cpp">
+      <Filter>Synthesis</Filter>
+    </ClCompile>
+    <ClCompile Include="Wave.cpp">
+      <Filter>Synthesis\Wave</Filter>
+    </ClCompile>
+    <ClCompile Include="WaveHold.cpp">
+      <Filter>Synthesis\Wave</Filter>
+    </ClCompile>
+    <ClCompile Include="WaveNoise.cpp">
+      <Filter>Synthesis\Wave</Filter>
+    </ClCompile>
+    <ClCompile Include="WavePoly.cpp">
+      <Filter>Synthesis\Wave</Filter>
+    </ClCompile>
+    <ClCompile Include="WavePulse.cpp">
+      <Filter>Synthesis\Wave</Filter>
+    </ClCompile>
+    <ClCompile Include="WaveSawtooth.cpp">
+      <Filter>Synthesis\Wave</Filter>
+    </ClCompile>
+    <ClCompile Include="WaveSine.cpp">
+      <Filter>Synthesis\Wave</Filter>
+    </ClCompile>
+    <ClCompile Include="WaveTriangle.cpp">
+      <Filter>Synthesis\Wave</Filter>
+    </ClCompile>
+    <ClCompile Include="Midi.cpp">
+      <Filter>Input</Filter>
+    </ClCompile>
+    <ClCompile Include="Control.cpp">
+      <Filter>Input</Filter>
+    </ClCompile>
+    <ClCompile Include="Keys.cpp">
+      <Filter>Input</Filter>
+    </ClCompile>
+    <ClCompile Include="Console.cpp">
+      <Filter>Utility</Filter>
+    </ClCompile>
+    <ClCompile Include="Debug.cpp">
+      <Filter>Utility</Filter>
+    </ClCompile>
+    <ClCompile Include="Random.cpp">
+      <Filter>Utility</Filter>
+    </ClCompile>
+    <ClCompile Include="Effect.cpp">
+      <Filter>Effect</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="StdAfx.h" />
+    <ClInclude Include="DisplayFilterFrequency.h">
+      <Filter>Display</Filter>
+    </ClInclude>
+    <ClInclude Include="DisplayKeyVolumeEnvelope.h">
+      <Filter>Display</Filter>
+    </ClInclude>
+    <ClInclude Include="DisplayLowFrequencyOscillator.h">
+      <Filter>Display</Filter>
+    </ClInclude>
+    <ClInclude Include="DisplayOscillatorFrequency.h">
+      <Filter>Display</Filter>
+    </ClInclude>
+    <ClInclude Include="DisplayOscillatorWaveform.h">
+      <Filter>Display</Filter>
+    </ClInclude>
+    <ClInclude Include="DisplaySpectrumAnalyzer.h">
+      <Filter>Display</Filter>
+    </ClInclude>
+    <ClInclude Include="Menu.h">
+      <Filter>Menu</Filter>
+    </ClInclude>
+    <ClInclude Include="MenuAMP.h">
+      <Filter>Menu\Main</Filter>
+    </ClInclude>
+    <ClInclude Include="MenuFLT.h">
+      <Filter>Menu\Main</Filter>
+    </ClInclude>
+    <ClInclude Include="MenuLFO.h">
+      <Filter>Menu\Main</Filter>
+    </ClInclude>
+    <ClInclude Include="MenuOSC.h">
+      <Filter>Menu\Main</Filter>
+    </ClInclude>
+    <ClInclude Include="MenuChorus.h">
+      <Filter>Menu\Effect</Filter>
+    </ClInclude>
+    <ClInclude Include="MenuCompressor.h">
+      <Filter>Menu\Effect</Filter>
+    </ClInclude>
+    <ClInclude Include="MenuDistortion.h">
+      <Filter>Menu\Effect</Filter>
+    </ClInclude>
+    <ClInclude Include="MenuEcho.h">
+      <Filter>Menu\Effect</Filter>
+    </ClInclude>
+    <ClInclude Include="MenuFlanger.h">
+      <Filter>Menu\Effect</Filter>
+    </ClInclude>
+    <ClInclude Include="MenuGargle.h">
+      <Filter>Menu\Effect</Filter>
+    </ClInclude>
+    <ClInclude Include="MenuReverb.h">
+      <Filter>Menu\Effect</Filter>
+    </ClInclude>
+    <ClInclude Include="MenuReverbI3D.h">
+      <Filter>Menu\Effect</Filter>
+    </ClInclude>
+    <ClInclude Include="Amplifier.h">
+      <Filter>Synthesis</Filter>
+    </ClInclude>
+    <ClInclude Include="Envelope.h">
+      <Filter>Synthesis</Filter>
+    </ClInclude>
+    <ClInclude Include="Filter.h">
+      <Filter>Synthesis</Filter>
+    </ClInclude>
+    <ClInclude Include="OscillatorLFO.h">
+      <Filter>Synthesis</Filter>
+    </ClInclude>
+    <ClInclude Include="Oscillator.h">
+      <Filter>Synthesis</Filter>
+    </ClInclude>
+    <ClInclude Include="OscillatorNote.h">
+      <Filter>Synthesis</Filter>
+    </ClInclude>
+    <ClInclude Include="PolyBLEP.h">
+      <Filter>Synthesis</Filter>
+    </ClInclude>
+    <ClInclude Include="SubOscillator.h">
+      <Filter>Synthesis</Filter>
+    </ClInclude>
+    <ClInclude Include="Voice.h">
+      <Filter>Synthesis</Filter>
+    </ClInclude>
+    <ClInclude Include="Wave.h">
+      <Filter>Synthesis\Wave</Filter>
+    </ClInclude>
+    <ClInclude Include="WaveHold.h">
+      <Filter>Synthesis\Wave</Filter>
+    </ClInclude>
+    <ClInclude Include="WaveNoise.h">
+      <Filter>Synthesis\Wave</Filter>
+    </ClInclude>
+    <ClInclude Include="WavePoly.h">
+      <Filter>Synthesis\Wave</Filter>
+    </ClInclude>
+    <ClInclude Include="WavePulse.h">
+      <Filter>Synthesis\Wave</Filter>
+    </ClInclude>
+    <ClInclude Include="WaveSawtooth.h">
+      <Filter>Synthesis\Wave</Filter>
+    </ClInclude>
+    <ClInclude Include="WaveSine.h">
+      <Filter>Synthesis\Wave</Filter>
+    </ClInclude>
+    <ClInclude Include="WaveTriangle.h">
+      <Filter>Synthesis\Wave</Filter>
+    </ClInclude>
+    <ClInclude Include="Midi.h">
+      <Filter>Input</Filter>
+    </ClInclude>
+    <ClInclude Include="Control.h">
+      <Filter>Input</Filter>
+    </ClInclude>
+    <ClInclude Include="Keys.h">
+      <Filter>Input</Filter>
+    </ClInclude>
+    <ClInclude Include="Console.h">
+      <Filter>Utility</Filter>
+    </ClInclude>
+    <ClInclude Include="Debug.h">
+      <Filter>Utility</Filter>
+    </ClInclude>
+    <ClInclude Include="Math.h">
+      <Filter>Utility</Filter>
+    </ClInclude>
+    <ClInclude Include="Random.h">
+      <Filter>Utility</Filter>
+    </ClInclude>
+    <ClInclude Include="Effect.h">
+      <Filter>Effect</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <Filter Include="Display">
+      <UniqueIdentifier>{725a49be-7065-4a4d-b7e3-5754f7138155}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Effect">
+      <UniqueIdentifier>{520798ec-b30b-4759-b6be-8b78a8cb42ce}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Input">
+      <UniqueIdentifier>{55175974-00af-4804-a0f1-537da20046ad}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Menu">
+      <UniqueIdentifier>{a2514e39-13e0-48d9-93fb-94c2eef5cd8c}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Menu\Effect">
+      <UniqueIdentifier>{9aca1c89-3377-4377-a103-879063a02e14}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Menu\Main">
+      <UniqueIdentifier>{70a8dda6-a6e5-4f4b-ac74-7e6e52b593df}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Synthesis">
+      <UniqueIdentifier>{e6d85b6c-973d-4b43-93aa-a5382cadb0c6}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Synthesis\Wave">
+      <UniqueIdentifier>{fd2aa25e-7bb0-4786-b73e-b3f9fd5a6149}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Utility">
+      <UniqueIdentifier>{9ef5ce22-23a1-4c97-a9ac-6ae914be0673}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+</Project>
