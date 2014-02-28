@@ -164,7 +164,6 @@
     <ClCompile Include="MenuEcho.cpp" />
     <ClCompile Include="MenuFlanger.cpp" />
     <ClCompile Include="MenuFLT.cpp" />
-    <ClCompile Include="MenuFX.cpp" />
     <ClCompile Include="MenuGargle.cpp" />
     <ClCompile Include="MenuLFO.cpp" />
     <ClCompile Include="MenuOSC.cpp" />
@@ -216,7 +215,6 @@
     <ClInclude Include="MenuEcho.h" />
     <ClInclude Include="MenuFlanger.h" />
     <ClInclude Include="MenuFLT.h" />
-    <ClInclude Include="MenuFX.h" />
     <ClInclude Include="MenuGargle.h" />
     <ClInclude Include="MenuLFO.h" />
     <ClInclude Include="MenuOSC.h" />
