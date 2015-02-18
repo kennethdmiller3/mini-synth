@@ -96,10 +96,16 @@ float EnvelopeState::Update(EnvelopeConfig const &config, float const step)
 
 	case RELEASE:
 		env_target = ENV_DECAY_BIAS;
-		if (amplitude < config.sustain_level || config.decay_rate < config.release_rate)
+		if (amplitude <= config.sustain_level || config.decay_rate < config.release_rate)
+		{
 			amplitude += (env_target - amplitude) * config.release_rate * step;
+		}
 		else
+		{
 			amplitude += (env_target - amplitude) * config.decay_rate * step;
+			if (amplitude <= config.sustain_level)
+				amplitude = config.sustain_level;
+		}
 		if (amplitude <= 0.0f)
 		{
 			amplitude = 0.0f;
