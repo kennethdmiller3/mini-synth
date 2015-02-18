@@ -52,6 +52,9 @@ namespace Midi
 		bool sysexreceive;
 		bool stopping;
 
+		// default to listening on all channels
+		int listen_channels = ~0U;
+
 		void HandleData(DWORD_PTR dwInstance, DWORD_PTR dwParam1, DWORD_PTR dwParam2)
 		{
 			unsigned char channel = ((dwParam1)& 0xF) + 1;
@@ -65,6 +68,11 @@ namespace Midi
 			if (status != MIDI_SYSTEM)
 			{
 				DebugPrint("#%02d ", channel);
+			}
+			if (!(listen_channels & (1 << channel)))
+			{
+				DebugPrint("\n");
+				return;
 			}
 			switch (status)
 			{
