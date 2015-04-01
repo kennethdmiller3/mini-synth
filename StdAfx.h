@@ -11,3 +11,6 @@
 #include "bass.h"
 
 #define ARRAY_SIZE(x) (sizeof(x)/sizeof(x[0]))
+
+#define WINDOW_WIDTH 80
+#define WINDOW_HEIGHT 50

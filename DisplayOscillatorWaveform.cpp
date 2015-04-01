@@ -17,7 +17,7 @@ Oscillator Waveform Display
 #include "Voice.h"
 #include "Control.h"
 
-#define WAVEFORM_WIDTH 80
+#define WAVEFORM_WIDTH WINDOW_WIDTH
 #define WAVEFORM_HEIGHT 20
 #define WAVEFORM_MIDLINE 10
 
@@ -76,7 +76,7 @@ float DisplayOscillatorWaveform::UpdateWaveformStep(int oversample, NoteOscillat
 void DisplayOscillatorWaveform::Update(HANDLE hOut, BASS_INFO const &info, int const v)
 {
 	// display region
-	SMALL_RECT region = { 0, 49 - WAVEFORM_HEIGHT, WAVEFORM_WIDTH - 1, 48 };
+	SMALL_RECT region = { 0, WINDOW_HEIGHT - 1 - WAVEFORM_HEIGHT, WAVEFORM_WIDTH - 1, WINDOW_HEIGHT - 2 };
 
 	// waveform buffer
 	CHAR_INFO buf[WAVEFORM_HEIGHT][WAVEFORM_WIDTH] = { 0 };

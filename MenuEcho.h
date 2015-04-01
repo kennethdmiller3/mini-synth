@@ -19,8 +19,8 @@ namespace Menu
 		};
 
 		// constructor
-		Echo(COORD pos, const char *name, int count)
-			: Menu(pos, name, count)
+		Echo(SMALL_RECT rect, const char *name, int count)
+			: Menu(rect, name, count)
 		{
 		}
 

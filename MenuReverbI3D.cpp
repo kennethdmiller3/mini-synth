@@ -7,7 +7,7 @@
 
 namespace Menu
 {
-	ReverbI3D menu_fx_reverb3d({ 41, page_pos.Y + 9 }, "F7 REVERB I3D", ReverbI3D::COUNT);
+	ReverbI3D menu_fx_reverb3d({ 41, page_pos.Y + 9, 41 + 18, page_pos.Y + 9 + ReverbI3D::COUNT }, "REVERB I3D", ReverbI3D::COUNT);
 
 	static int atten_step[] = { 1, 10, 100, 1000 };
 

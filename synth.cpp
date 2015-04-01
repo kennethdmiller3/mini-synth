@@ -296,11 +296,11 @@ void __cdecl main(int argc, char **argv)
 	SetConsoleTitle(TEXT(title_text));
 
 	// set the console buffer size
-	static const COORD bufferSize = { 80, 50 };
+	static const COORD bufferSize = { WINDOW_WIDTH, WINDOW_HEIGHT };
 	SetConsoleScreenBufferSize(hOut, bufferSize);
 
 	// set the console window size
-	static const SMALL_RECT windowSize = { 0, 0, 79, 49 };
+	static const SMALL_RECT windowSize = { 0, 0, WINDOW_WIDTH - 1, WINDOW_HEIGHT - 1 };
 	SetConsoleWindowInfo(hOut, TRUE, &windowSize);
 
 	// clear the window
@@ -311,7 +311,7 @@ void __cdecl main(int argc, char **argv)
 	SetConsoleCursorInfo(hOut, &cursorInfo);
 
 	// set input mode
-	SetConsoleMode(hIn, 0);
+	SetConsoleMode(hIn, ENABLE_MOUSE_INPUT);
 
 	// 10ms update period
 	const DWORD STREAM_UPDATE_PERIOD = 10;
@@ -320,7 +320,7 @@ void __cdecl main(int argc, char **argv)
 	// initialize BASS sound library
 	const DWORD STREAM_FREQUENCY = 48000;
 	if (!BASS_Init(-1, STREAM_FREQUENCY, BASS_DEVICE_LATENCY, 0, NULL))
-		Error("Can't initialize device");
+		Error("Can't initialize device\n");
 
 	// get device info
 	BASS_GetInfo(&info);
@@ -406,6 +406,9 @@ void __cdecl main(int argc, char **argv)
 	PrintKeyOctave(hOut);
 	PrintGoToEffects(hOut);
 	PrintAntialias(hOut);
+
+	// initialize the menu system
+	Menu::Init();
 
 	// show main page
 	Menu::SetActivePage(hOut, Menu::PAGE_MAIN);
@@ -539,6 +542,13 @@ void __cdecl main(int argc, char **argv)
 					}
 				}
 			}
+			else if (keyin.EventType == MOUSE_EVENT)
+			{
+				if (keyin.Event.MouseEvent.dwEventFlags == 0 && (keyin.Event.MouseEvent.dwButtonState & FROM_LEFT_1ST_BUTTON_PRESSED))
+				{
+					Menu::Click(hOut, keyin.Event.MouseEvent.dwMousePosition);
+				}
+			}
 		}
 
 		// center frequency of the zeroth semitone band
@@ -572,7 +582,7 @@ void __cdecl main(int argc, char **argv)
 		}
 
 		// show CPU usage
-		PrintConsole(hOut, { 73, 49 }, "%6.2f%%", BASS_GetCPU());
+		PrintConsole(hOut, { WINDOW_WIDTH - 7, WINDOW_HEIGHT - 1 }, "%6.2f%%", BASS_GetCPU());
 
 		// sleep for 1/60th of second
 		Sleep(16);

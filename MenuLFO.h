@@ -23,8 +23,8 @@ namespace Menu
 		};
 
 		// constructor
-		LFO(COORD pos, const char *name, int count)
-			: Menu(pos, name, count)
+		LFO(SMALL_RECT rect, const char *name, int count)
+			: Menu(rect, name, count)
 		{
 		}
 

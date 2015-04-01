@@ -20,8 +20,8 @@ namespace Menu
 		};
 
 		// constructor
-		Compressor(COORD pos, const char *name, int count)
-			: Menu(pos, name, count)
+		Compressor(SMALL_RECT rect, const char *name, int count)
+			: Menu(rect, name, count)
 		{
 		}
 

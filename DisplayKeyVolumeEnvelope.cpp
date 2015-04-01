@@ -15,7 +15,7 @@ Per-Key Volume Envelope Display
 #include "Amplifier.h"
 
 static COORD const key_pos = { 12, SPECTRUM_HEIGHT };
-static COORD const voice_pos = { 73 - VOICES, 49 };
+static COORD const voice_pos = { WINDOW_WIDTH - 7 - VOICES, WINDOW_HEIGHT - 1 };
 
 // attribute associated with each envelope state
 static WORD const env_attrib[EnvelopeState::COUNT] =

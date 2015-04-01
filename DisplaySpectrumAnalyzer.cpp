@@ -154,7 +154,7 @@ void DisplaySpectrumAnalyzer::Update(HANDLE hOut, DWORD stream, BASS_INFO const 
 	// plot log-log spectrum
 	// each grid cell is one semitone wide and 6 dB high
 	CHAR_INFO buf[SPECTRUM_HEIGHT][SPECTRUM_WIDTH];
-	SMALL_RECT region = { 0, 0, 79, 49 };
+	SMALL_RECT region = { 0, 0, SPECTRUM_WIDTH - 1, SPECTRUM_HEIGHT - 1 };
 	float threshold = 1.0f;
 	for (int y = 0; y < SPECTRUM_HEIGHT; ++y)
 	{

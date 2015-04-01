@@ -28,7 +28,15 @@ namespace Menu
 	static Menu * const menu_main[] =
 	{
 		&menu_osc[0],
+#if NUM_OSCILLATORS >= 2
 		&menu_osc[1],
+#if NUM_OSCILLATORS >= 3
+		&menu_osc[2],
+#if NUM_OSCILLATORS >= 4
+		&menu_osc[3],
+#endif
+#endif
+#endif
 		&menu_lfo,
 		&menu_flt,
 		&menu_amp,
@@ -57,7 +65,7 @@ namespace Menu
 	Page active_page = PAGE_MAIN;
 
 	// active menu
-	int active_menu = MAIN_OSC1;
+	int active_menu = 0;
 	int save_menu[PAGE_COUNT];
 
 	// menu attributes
@@ -120,11 +128,23 @@ namespace Menu
 	// update a linear time property
 	float const time_step[] = { 1, 10, 100, 1000 };
 
+	// initialize the menu system
+	void Init()
+	{
+		for (int page = 0; page < ARRAY_SIZE(page_info); ++page)
+		{
+			for (int i = 0; i < page_info[page].count; ++i)
+			{
+				page_info[page].menu[i]->menu = i;
+			}
+		}
+	}
+
 	// set the active page
 	void SetActivePage(HANDLE hOut, Page page)
 	{
 		// clear the area
-		static DWORD const size = (49 - page_pos.Y) * 80;
+		static DWORD const size = (WINDOW_HEIGHT - 1 - page_pos.Y) * WINDOW_WIDTH;
 		DWORD written;
 		FillConsoleOutputCharacter(hOut, 0, size, page_pos, &written);
 		FillConsoleOutputAttribute(hOut, FOREGROUND_RED | FOREGROUND_GREEN | FOREGROUND_BLUE, size, page_pos, &written);
@@ -164,24 +184,36 @@ namespace Menu
 		SetActiveMenu(hOut, active_menu > 0 ? active_menu - 1 : page_info[active_page].count - 1);
 	}
 
-	// menu input handler
+	// menu key press handler
 	void Handler(HANDLE hOut, WORD key, DWORD modifiers)
 	{
 		page_info[active_page].menu[active_menu]->Handler(hOut, key, modifiers);
 	}
+
+	// menu mouse click handler
+	void Click(HANDLE hOut, COORD pos)
+	{
+		// try dispatching to menus
+		for (int menu = 0; menu < page_info[active_page].count; ++menu)
+		{
+			if (page_info[active_page].menu[menu]->Click(hOut, pos))
+				break;
+		}
+	}
+
 
 	// print menu title bar
 	void Menu::PrintTitle(HANDLE hOut, bool enable, DWORD flags, char const *on_text, char const *off_text)
 	{
 		// print menu name
 		WORD const attrib = title_attrib[enable][flags];
-		PrintConsoleWithAttribute(hOut, pos, attrib, "%-15s", name);
+		PrintConsoleWithAttribute(hOut, { rect.Left, rect.Top }, attrib, "F%d %-*s", menu + 1, rect.Right - rect.Left - 3, name);
 
 		// print component enabled
 		if (char const *text = enable ? on_text : off_text)
 		{
 			WORD const enable_attrib = (attrib & 0xF8) | (enable ? FOREGROUND_GREEN : (flags ? FOREGROUND_RED : 0));
-			PrintConsoleWithAttribute(hOut, { pos.X + 15, pos.Y }, enable_attrib, text);
+			PrintConsoleWithAttribute(hOut, { rect.Right - 3, rect.Top }, enable_attrib, text);
 		}
 	}
 
@@ -196,26 +228,26 @@ namespace Menu
 		WORD const attrib = item_attrib[flags];
 		PrintConsoleWithAttribute(hOut, pos, attrib, format, value);
 	}
-	void PrintItemBool(HANDLE hOut, COORD pos, DWORD flags, char const *format, bool value)
+	void PrintItemBool(HANDLE hOut, COORD pos, SHORT width, DWORD flags, char const *format, bool value)
 	{
 		WORD const attrib = item_attrib[flags];
 		PrintConsoleWithAttribute(hOut, pos, attrib, format);
 		WORD const value_attrib = (attrib & 0xF8) | (value ? FOREGROUND_GREEN : FOREGROUND_RED);
 		char const *value_text = value ? " ON" : "OFF";
-		PrintConsoleWithAttribute(hOut, { pos.X + 15, pos.Y }, value_attrib, value_text);
+		PrintConsoleWithAttribute(hOut, { pos.X + width - 3, pos.Y }, value_attrib, value_text);
 	}
 
 	// print marker
-	static void PrintMarker(HANDLE hOut, COORD pos, CHAR_INFO left, CHAR_INFO right)
+	void Menu::PrintMarker(HANDLE hOut, int index, CHAR_INFO left, CHAR_INFO right)
 	{
 		static COORD const zero = { 0, 0 };
 		static COORD const size = { 1, 1 };
 		SMALL_RECT region;
 
-		region.Left = region.Right = pos.X - 1;
-		region.Top = region.Bottom = pos.Y;
+		region.Left = region.Right = rect.Left - 1;
+		region.Top = region.Bottom = rect.Top + SHORT(index);
 		WriteConsoleOutput(hOut, &left, size, zero, &region);
-		region.Left = region.Right = pos.X + 18;
+		region.Left = region.Right = rect.Right;
 		WriteConsoleOutput(hOut, &right, size, zero, &region);
 	}
 
@@ -225,47 +257,43 @@ namespace Menu
 	static CHAR_INFO const marker_blank = { 0, FOREGROUND_RED | FOREGROUND_GREEN | FOREGROUND_BLUE };
 
 	// show selection marker on an item
-	static inline void ShowMarker(HANDLE hOut, COORD pos)
+	inline void Menu::ShowMarker(HANDLE hOut, int index)
 	{
-		PrintMarker(hOut, pos, marker_left, marker_right);
+		PrintMarker(hOut, index, marker_left, marker_right);
 	}
 
 	// hide selection marker on an item
-	static inline void HideMarker(HANDLE hOut, COORD pos)
+	inline void Menu::HideMarker(HANDLE hOut, int index)
 	{
-		PrintMarker(hOut, pos, marker_blank, marker_blank);
+		PrintMarker(hOut, index, marker_blank, marker_blank);
 	}
 
 	// print the whole menu
 	void Menu::Print(HANDLE hOut)
 	{
-		COORD p = pos;
-		p.Y += SHORT(item);
-
 		int flags[2];
 		if (active_menu >= 0 && this == page_info[active_page].menu[active_menu])
 		{
-			ShowMarker(hOut, p);
+			ShowMarker(hOut, item);
 			flags[0] = 1; flags[1] = 2;
 		}
 		else
 		{
-			HideMarker(hOut, p);
+			HideMarker(hOut, item);
 			flags[0] = 0; flags[1] = 0;
 		}
 
-		p.Y = pos.Y;
 		for (int i = 0; i < count; ++i)
 		{
-			Print(i, hOut, p, flags[item == i]);
-			++p.Y;
+			Print(i, hOut, { rect.Left, rect.Top + SHORT(i) }, flags[item == i]);
 		}
 	}
 
-	// general menu handler
+	// general key press handler
 	void Menu::Handler(HANDLE hOut, WORD key, DWORD modifiers)
 	{
 		int sign;
+		COORD pos = { rect.Left, rect.Top };
 		COORD p = pos;
 		switch (key)
 		{
@@ -273,12 +301,12 @@ namespace Menu
 		case VK_DOWN:
 			sign = key == VK_DOWN ? 1 : -1;
 			p.Y = pos.Y + SHORT(item);
-			HideMarker(hOut, p);
+			HideMarker(hOut, item);
 			Print(item, hOut, p, 1);
 			item = (item + count + sign) % count;
 			p.Y = pos.Y + SHORT(item);
 			Print(item, hOut, p, 2);
-			ShowMarker(hOut, p);
+			ShowMarker(hOut, item);
 			break;
 
 		case VK_LEFT:
@@ -289,5 +317,19 @@ namespace Menu
 			Print(item, hOut, p, 2);
 			break;
 		}
+	}
+
+	// general mouse click handler
+	bool Menu::Click(HANDLE hOut, COORD pos)
+	{
+		if (!Inside(pos))
+			return false;
+		SetActiveMenu(hOut, menu);
+		HideMarker(hOut, item);
+		Print(item, hOut, { rect.Left, rect.Top + SHORT(item) }, 1);
+		item = Clamp(pos.Y - rect.Top, 0, count - 1);
+		Print(item, hOut, { rect.Left, rect.Top + SHORT(item) }, 2);
+		ShowMarker(hOut, item);
+		return true;
 	}
 }

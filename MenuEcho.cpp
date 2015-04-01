@@ -7,7 +7,7 @@
 
 namespace Menu
 {
-	Echo menu_fx_echo({ 61, page_pos.Y }, "F4 ECHO", Echo::COUNT);
+	Echo menu_fx_echo({ 61, page_pos.Y, 61 + 18, page_pos.Y + Echo::COUNT }, "ECHO", Echo::COUNT);
 
 	void Echo::Update(int index, int sign, DWORD modifiers)
 	{
@@ -58,7 +58,7 @@ namespace Menu
 			PrintItemFloat(hOut, pos, flags, "R Delay: %7.2fms", fx_echo.fRightDelay);
 			break;
 		case PAN_DELAY:
-			PrintItemBool(hOut, pos, flags, "Pan Delay:     ", fx_echo.lPanDelay != 0);
+			PrintItemBool(hOut, pos, 18, flags, "Pan Delay:     ", fx_echo.lPanDelay != 0);
 			break;
 		default:
 			__assume(0);

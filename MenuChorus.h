@@ -21,8 +21,8 @@ namespace Menu
 		};
 
 		// constructor
-		Chorus(COORD pos, const char *name, int count)
-			: Menu(pos, name, count)
+		Chorus(SMALL_RECT rect, const char *name, int count)
+			: Menu(rect, name, count)
 		{
 		}
 

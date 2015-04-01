@@ -7,7 +7,7 @@
 
 namespace Menu
 {
-	Compressor menu_fx_compressor({ 21, page_pos.Y }, "F2 COMPRESS", Compressor::COUNT);
+	Compressor menu_fx_compressor({ 21, page_pos.Y, 21 + 18, page_pos.Y + Compressor::COUNT }, "COMPRESS", Compressor::COUNT);
 
 	void Compressor::Update(int index, int sign, DWORD modifiers)
 	{

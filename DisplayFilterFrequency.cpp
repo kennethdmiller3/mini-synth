@@ -32,12 +32,13 @@ void DisplayFilterFrequency::Update(HANDLE hOut, int const v)
 	float const flt_key_freq = NoteFrequency(voice_note[v], flt_config.key_follow);
 
 	// get attributes to use
-	COORD const pos = { Menu::menu_flt.pos.X + 8, Menu::menu_flt.pos.Y };
-	bool const selected = (Menu::active_page == Menu::PAGE_MAIN && Menu::active_menu == Menu::MAIN_FLT);
+	COORD const pos = { Menu::menu_flt.rect.Right - 10, Menu::menu_flt.rect.Top };
+	bool const selected = (Menu::page_info[Menu::active_page].menu[Menu::active_menu] == &Menu::menu_flt);
 	bool const title_selected = selected && Menu::menu_flt.item == 0;
 	WORD const title_attrib = Menu::title_attrib[true][selected + title_selected];
-	WORD const num_attrib = (title_attrib & 0xF8) | (FOREGROUND_GREEN);
-	WORD const unit_attrib = (title_attrib & 0xF8) | (FOREGROUND_RED | FOREGROUND_GREEN | FOREGROUND_BLUE);
+	WORD const back_attrib = title_attrib & 0xF8;
+	WORD const num_attrib = back_attrib | (FOREGROUND_GREEN);
+	WORD const unit_attrib = back_attrib | (FOREGROUND_RED | FOREGROUND_GREEN | FOREGROUND_BLUE);
 
 	// current frequency in Hz
 	float const freq = flt_key_freq * flt_config.GetCutoff(lfo, flt_env_amplitude, key_vel);

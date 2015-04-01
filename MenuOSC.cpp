@@ -13,10 +13,22 @@ Note Oscillator Menu
 
 namespace Menu
 {
+	static const SHORT x = 1;
+	static const SHORT width = 18;
+	static const SHORT stride = 20;
+
 	OSC menu_osc[NUM_OSCILLATORS] =
 	{
-		OSC(0, { 1, page_pos.Y }, "F1 OSC1", OSC::COUNT - 1),
-		OSC(1, { 21, page_pos.Y }, "F2 OSC2", OSC::COUNT),
+		OSC(0, { x,              page_pos.Y, x + width,              page_pos.Y + OSC::COUNT }, "OSC1", OSC::COUNT - 1),
+#if NUM_OSCILLATORS >= 2
+		OSC(1, { x + stride * 1, page_pos.Y, x + stride * 1 + width, page_pos.Y + OSC::COUNT }, "OSC2", OSC::COUNT),
+#if NUM_OSCILLATORS >= 3
+		OSC(2, { x + stride * 2, page_pos.Y, x + stride * 2 + width, page_pos.Y + OSC::COUNT }, "OSC3", OSC::COUNT),
+#if NUM_OSCILLATORS >= 4
+		OSC(3, { x + stride * 3, page_pos.Y, x + stride * 3 + width, page_pos.Y + OSC::COUNT }, "OSC4", OSC::COUNT),
+#endif
+#endif
+#endif
 	};
 
 	// oscillator menus
@@ -108,7 +120,7 @@ namespace Menu
 			PrintItemFloat(hOut, pos, flags, "Sub Ampl: % 7.1f%%", config.sub_osc_amplitude * 100.0f);
 			break;
 		case HARD_SYNC:
-			PrintItemBool(hOut, pos, flags, "Hard Sync:     ", config.sync_enable);
+			PrintItemBool(hOut, pos, rect.Right - rect.Left, flags, "Hard Sync:     ", config.sync_enable);
 			break;
 		default:
 			__assume(0);

@@ -26,8 +26,8 @@ namespace Menu
 		};
 
 		// constructor
-		AMP(COORD pos, const char *name, int count)
-			: Menu(pos, name, count)
+		AMP(SMALL_RECT rect, const char *name, int count)
+			: Menu(rect, name, count)
 		{
 		}
 

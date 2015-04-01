@@ -21,8 +21,8 @@ namespace Menu
 		};
 
 		// constructor
-		Flanger(COORD pos, const char *name, int count)
-			: Menu(pos, name, count)
+		Flanger(SMALL_RECT rect, const char *name, int count)
+			: Menu(rect, name, count)
 		{
 		}
 

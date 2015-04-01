@@ -19,18 +19,6 @@ namespace Menu
 		PAGE_COUNT
 	};
 
-	// main menu modes
-	enum MainMode
-	{
-		MAIN_OSC1,
-		MAIN_OSC2,
-		MAIN_LFO,
-		MAIN_FLT,
-		MAIN_AMP,
-
-		MAIN_COUNT
-	};
-
 	struct PageInfo
 	{
 		Menu * const *menu;
@@ -48,6 +36,9 @@ namespace Menu
 
 	// active menu index
 	extern int active_menu;
+
+	// initialize the menu system
+	void Init();
 
 	// update a property
 	// sign: direction to change the property (+ or -)
@@ -88,8 +79,11 @@ namespace Menu
 	extern void NextMenu(HANDLE hOut);
 	extern void PrevMenu(HANDLE hOut);
 
-	// menu input handler
+	// menu key press handler
 	extern void Handler(HANDLE hOut, WORD key, DWORD modifiers);
+
+	// menu mouse click handler
+	extern void Click(HANDLE hOut, COORD pos);
 
 	// print all menus on the active page
 	extern void PrintActivePage();
@@ -97,20 +91,22 @@ namespace Menu
 	// utility functions for printing menu items
 	extern void PrintItemFloat(HANDLE hOut, COORD pos, DWORD flags, char const *format, float value);
 	extern void PrintItemString(HANDLE hOut, COORD pos, DWORD flags, char const *format, char const *value);
-	extern void PrintItemBool(HANDLE hOut, COORD pos, DWORD flags, char const *format, bool value);
+	extern void PrintItemBool(HANDLE hOut, COORD pos, SHORT width, DWORD flags, char const *format, bool value);
 
 	class Menu
 	{
 	public:
-		COORD pos;			// screen position
+		SMALL_RECT rect;	// screen rectangle
+		int menu;			// menu number
 		const char *name;	// menu title
 		int count;			// number of items
 
 		int item;			// selected item
 
 		// constructor
-		Menu(COORD pos, const char *name, int count)
-			: pos(pos)
+		Menu(SMALL_RECT rect, const char *name, int count)
+			: rect(rect)
+			, menu(0)
 			, name(name)
 			, count(count)
 			, item(0)
@@ -120,10 +116,23 @@ namespace Menu
 		// print the whole menu
 		void Print(HANDLE hOut);
 
-		// shared input handler
+		// shared key press handler
 		void Handler(HANDLE hOut, WORD key, DWORD modifiers);
 
+		// check if a position is inside the menu
+		inline bool Inside(COORD pos)
+		{
+			return pos.X >= rect.Left && pos.X < rect.Right && pos.Y >= rect.Top && pos.Y < rect.Bottom;
+		}
+
+		// shared mouse click handler
+		bool Click(HANDLE hOut, COORD pos);
+
 	protected:
+		void PrintMarker(HANDLE hOut, int index, CHAR_INFO left, CHAR_INFO right);
+		void ShowMarker(HANDLE hOut, int index);
+		void HideMarker(HANDLE hOut, int index);
+
 		// update a single item
 		virtual void Update(int index, int sign, DWORD modifiers) = 0;
 

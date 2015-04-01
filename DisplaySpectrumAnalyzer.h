@@ -6,7 +6,7 @@ Copyright 2014 Kenneth D. Miller III
 Spectrum Analyzer Display
 */
 
-#define SPECTRUM_WIDTH 80
+#define SPECTRUM_WIDTH WINDOW_WIDTH
 #define SPECTRUM_HEIGHT 10
 
 // fast fourier transform properties

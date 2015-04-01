@@ -32,8 +32,8 @@ namespace Menu
 		};
 
 		// constructor
-		FLT(COORD pos, const char *name, int count)
-			: Menu(pos, name, count)
+		FLT(SMALL_RECT rect, const char *name, int count)
+			: Menu(rect, name, count)
 		{
 		}
 

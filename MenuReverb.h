@@ -18,8 +18,8 @@ namespace Menu
 		};
 
 		// constructor
-		Reverb(COORD pos, const char *name, int count)
-			: Menu(pos, name, count)
+		Reverb(SMALL_RECT rect, const char *name, int count)
+			: Menu(rect, name, count)
 		{
 		}
 

@@ -33,8 +33,8 @@ namespace Menu
 		int osc;	// oscillator index
 
 		// constructor
-		OSC(int osc, COORD pos, const char *name, int count)
-			: Menu(pos, name, count)
+		OSC(int osc, SMALL_RECT rect, const char *name, int count)
+			: Menu(rect, name, count)
 			, osc(osc)
 		{
 		}

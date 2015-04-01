@@ -26,8 +26,8 @@ namespace Menu
 		};
 
 		// constructor
-		ReverbI3D(COORD pos, const char *name, int count)
-			: Menu(pos, name, count)
+		ReverbI3D(SMALL_RECT rect, const char *name, int count)
+			: Menu(rect, name, count)
 		{
 		}
 

@@ -21,12 +21,13 @@ void DisplayOscillatorFrequency::Update(HANDLE hOut, int const v, int const o)
 	float const osc_key_freq = NoteFrequency(voice_note[v], osc_config[o].key_follow);
 
 	// get attributes to use
-	COORD const pos = { Menu::menu_osc[o].pos.X + 8, Menu::menu_osc[o].pos.Y };
-	bool const selected = (Menu::active_page == Menu::PAGE_MAIN && Menu::active_menu == Menu::MAIN_OSC1 + o);
+	COORD const pos = { Menu::menu_osc[o].rect.Right - 10, Menu::menu_osc[o].rect.Top };
+	bool const selected = (Menu::page_info[Menu::active_page].menu[Menu::active_menu] == &Menu::menu_osc[o]);
 	bool const title_selected = selected && Menu::menu_osc[o].item == 0;
 	WORD const title_attrib = Menu::title_attrib[true][selected + title_selected];
-	WORD const num_attrib = (title_attrib & 0xF8) | (FOREGROUND_GREEN);
-	WORD const unit_attrib = (title_attrib & 0xF8) | (FOREGROUND_RED | FOREGROUND_GREEN | FOREGROUND_BLUE);
+	WORD const back_attrib = title_attrib & 0xF8;
+	WORD const num_attrib = back_attrib | (FOREGROUND_GREEN);
+	WORD const unit_attrib = back_attrib | (FOREGROUND_RED | FOREGROUND_GREEN | FOREGROUND_BLUE);
 
 	// current frequency in Hz
 	float const freq = osc_key_freq * osc_config[o].frequency;

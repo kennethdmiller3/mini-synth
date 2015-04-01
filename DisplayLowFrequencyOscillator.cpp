@@ -24,21 +24,21 @@ static WORD const plot[2] = { 221, 222 };
 void DisplayLowFrequencyOscillator::Update(HANDLE hOut)
 {
 	// initialize buffer
-	CHAR_INFO buf[18];
-	for (int x = 0; x < 9; x++)
+	CHAR_INFO *buf = static_cast<CHAR_INFO *>(_alloca(size.X * sizeof(CHAR_INFO)));
+	for (int x = 0; x < size.X / 2; x++)
 		buf[x] = negative;
-	for (int x = 9; x < 18; ++x)
+	for (int x = size.X / 2; x < size.X; ++x)
 		buf[x] = positive;
 
 	// plot low-frequency oscillator value
 	float const lfo = lfo_state.Update(lfo_config, 0.0f);
-	int const grid_x = Clamp(FloorInt(18.0f * lfo + 18.0f), 0, 35);
+	int const grid_x = Clamp(FloorInt(size.X * lfo + size.X), 0, size.X * 2 - 1);
 	buf[grid_x / 2].Char.UnicodeChar = plot[grid_x & 1];
 
 	// draw the gauge
 	SMALL_RECT region = {
-		Menu::menu_lfo.pos.X, Menu::menu_lfo.pos.Y + 4,
-		Menu::menu_lfo.pos.X + 19, Menu::menu_lfo.pos.Y + 4
+		Menu::menu_lfo.rect.Left, Menu::menu_lfo.rect.Bottom,
+		Menu::menu_lfo.rect.Right + 1, Menu::menu_lfo.rect.Bottom
 	};
 	WriteConsoleOutput(hOut, &buf[0], size, pos, &region);
 }
