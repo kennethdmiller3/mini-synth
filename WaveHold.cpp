@@ -108,6 +108,28 @@ static float OscillatorLerp(OscillatorConfig const &config, OscillatorState &sta
 	return value;
 }
 
+// shared data oscillator
+static float OscillatorCubic(OscillatorConfig const &config, OscillatorState &state, float data[], int cycle, float step)
+{
+	if (step > 0.5f * cycle)
+		return 0;
+
+	// four consecutive wavetable values
+	register float const value0 = data[state.index];
+	register float const value1 = data[(state.index + 1) & (cycle - 1)];
+	register float const value2 = data[(state.index + 2) & (cycle - 1)];
+	register float const value3 = data[(state.index + 3) & (cycle - 1)];
+
+	// cubic interpolation
+	// (Catmull-Rom spline)
+	register float value = 
+		value1 + 
+		state.phase * 0.5 * (value2 - value0 +
+		state.phase * (2.0 * value0 - 5.0 * value1 + 4.0 * value2 - value3 + 
+		state.phase * (3.0 * (value1 - value2) + value3 - value0)));
+
+	return value;
+}
 
 // sample-and-hold noise
 float OscillatorNoiseHold(OscillatorConfig const &config, OscillatorState &state, float step)
@@ -116,7 +138,13 @@ float OscillatorNoiseHold(OscillatorConfig const &config, OscillatorState &state
 }
 
 // linear interpolated noise
-float OscillatorNoiseSlope(OscillatorConfig const &config, OscillatorState &state, float step)
+float OscillatorNoiseLinear(OscillatorConfig const &config, OscillatorState &state, float step)
 {
 	return OscillatorLerp(config, state, noise, ARRAY_SIZE(noise), step);
+}
+
+// cubic interpolated noise
+float OscillatorNoiseCubic(OscillatorConfig const &config, OscillatorState &state, float step)
+{
+	return OscillatorCubic(config, state, noise, ARRAY_SIZE(noise), step);
 }

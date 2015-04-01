@@ -20,8 +20,9 @@ enum Wave
 	WAVE_SAWTOOTH,
 	WAVE_TRIANGLE,
 	WAVE_NOISE,
-	WAVE_NOISE_HOLD,
-	WAVE_NOISE_SLOPE,
+	WAVE_NOISE_HOLD,	// noise with sample and hold
+	WAVE_NOISE_LINEAR,	// noise with linear interpolation
+	WAVE_NOISE_CUBIC,	// noise with cubic interpolation
 
 	WAVE_POLY4,			// Atari POKEY AUDC 12
 	WAVE_POLY5,			// Atari TIA AUDC 7 or 9

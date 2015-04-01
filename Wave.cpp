@@ -27,7 +27,8 @@ WaveEvaluate const wave_evaluate[WAVE_COUNT] =
 	OscillatorTriangle,		// WAVE_TRIANGLE,
 	OscillatorNoise,		// WAVE_NOISE,
 	OscillatorNoiseHold,	// WAVE_NOISE_HOLD
-	OscillatorNoiseSlope,	// WAVE_NOISE_SLOPE
+	OscillatorNoiseLinear,	// WAVE_NOISE_LINEAR
+	OscillatorNoiseCubic,	// WAVE_NOISE_CUBIC
 	OscillatorPoly,			// WAVE_POLY4,
 	OscillatorPoly,			// WAVE_POLY5,
 	OscillatorPoly,			// WAVE_PERIOD93,
@@ -47,7 +48,8 @@ char const * const wave_name[WAVE_COUNT] =
 	"Triangle",		// WAVE_TRIANGLE,
 	"Noise",		// WAVE_NOISE,
 	"Noise Hold",	// WAVE_NOISE_HOLD
-	"Noise Slope",	// WAVE_NOISE_SLOPE
+	"Noise Linear",	// WAVE_NOISE_LINEAR
+	"Noise Cubic",	// WAVE_NOISE_CUBIC
 	"Poly4",		// WAVE_POLY4,
 	"Poly5",		// WAVE_POLY5,
 	"Period-93",	// WAVE_PERIOD93,
@@ -70,7 +72,8 @@ float const wave_adjust_frequency[WAVE_COUNT] =
 	1.0f,					// WAVE_TRIANGLE,
 	1.0f, 					// WAVE_NOISE,
 	1.0f,					// WAVE_NOISE_HOLD,
-	1.0f,					// WAVE_NOISE_SLOPE,
+	1.0f,					// WAVE_NOISE_LINEAR,
+	1.0f,					// WAVE_NOISE_CUBIC,
 	2.0f * 15.0f / 16.0f,	// WAVE_POLY4,
 	2.0f * 31.0f / 32.0f,	// WAVE_POLY5,
 	2.0f * 93.0f / 128.0f,	// WAVE_PERIOD93,
@@ -91,7 +94,8 @@ int const wave_loop_cycle[WAVE_COUNT] =
 	INT_MAX,					// WAVE_TRIANGLE,
 	INT_MAX,					// WAVE_NOISE,
 	ARRAY_SIZE(noise),			// WAVE_NOISE_HOLD
-	ARRAY_SIZE(noise),			// WAVE_NOISE_SLOPE
+	ARRAY_SIZE(noise),			// WAVE_NOISE_LINEAR
+	ARRAY_SIZE(noise),			// WAVE_NOISE_CUBIC
 	ARRAY_SIZE(poly4),			// WAVE_POLY4,
 	ARRAY_SIZE(poly5),			// WAVE_POLY5,
 	ARRAY_SIZE(period93),		// WAVE_PERIOD93,
