@@ -115,18 +115,25 @@ static float OscillatorCubic(OscillatorConfig const &config, OscillatorState &st
 		return 0;
 
 	// four consecutive wavetable values
-	register float const value0 = data[state.index];
-	register float const value1 = data[(state.index + 1) & (cycle - 1)];
-	register float const value2 = data[(state.index + 2) & (cycle - 1)];
-	register float const value3 = data[(state.index + 3) & (cycle - 1)];
+	register int index = state.index;
+	register float const value0 = data[index];
+	if (++index >= cycle)
+		index = 0;
+	register float const value1 = data[index];
+	if (++index >= cycle)
+		index = 0;
+	register float const value2 = data[index];
+	if (++index >= cycle)
+		index = 0;
+	register float const value3 = data[index];
 
 	// cubic interpolation
 	// (Catmull-Rom spline)
 	register float value = 
 		value1 + 
-		state.phase * 0.5 * (value2 - value0 +
-		state.phase * (2.0 * value0 - 5.0 * value1 + 4.0 * value2 - value3 + 
-		state.phase * (3.0 * (value1 - value2) + value3 - value0)));
+		state.phase * 0.5f * (value2 - value0 +
+		state.phase * (2.0f * value0 - 5.0f * value1 + 4.0f * value2 - value3 + 
+		state.phase * (3.0f * (value1 - value2) + value3 - value0)));
 
 	return value;
 }
