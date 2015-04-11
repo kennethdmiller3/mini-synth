@@ -36,14 +36,8 @@ float CubicSaturate(float const x)
 #define Saturate(x) FastTanh(x)
 //#define Saturate(x) tanhf(x)
 
-// compensate for reduced gain at low frequencies as resonance increases
-// 0.0: no compensation, -12dB at low frequencies
-// 0.5: half compensation, -6dB at low frequencies
-// 1.0: full compensation, -0dB at low frequencies
-static float const GAIN_COMPENSATION = 0.5f;
-
 // filter configuration
-FilterConfig flt_config(false, FilterConfig::LOWPASS_4, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f);
+FilterConfig flt_config(false, FilterConfig::LOWPASS_4, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f);
 
 // filter envelope config
 EnvelopeConfig flt_env_config(false, 0.0f, 1.0f, 0.0f, 0.1f);
@@ -303,7 +297,7 @@ void FilterState::Setup(float const cutoff, float const resonance, float const s
 float FilterState::Update(FilterConfig const &config, float const input)
 {
 	// input with drive and gain compensation
-	float const input_adjusted = config.drive * (input + input * feedback * GAIN_COMPENSATION);
+	float const input_adjusted = input * config.drive * (1.0f + feedback * config.compensation);
 
 #if FILTER == FILTER_IMPROVED_MOOG
 

@@ -56,6 +56,9 @@ public:
 	// drive parameter
 	float drive;
 
+	// gain compensation
+	float compensation;
+
 	// resonance parameter
 	float resonance;
 
@@ -68,9 +71,10 @@ public:
 	// key follow
 	float key_follow;
 
-	FilterConfig(bool const enable, Mode const mode, float const drive, float const resonance, float const cutoff_base, float const cutoff_lfo, float const cutoff_env, float const cutoff_env_vel, float const key_follow)
+	FilterConfig(bool const enable, Mode const mode, float const drive, float const compensation, float const resonance, float const cutoff_base, float const cutoff_lfo, float const cutoff_env, float const cutoff_env_vel, float const key_follow)
 		: enable(enable)
 		, drive(drive)
+		, compensation(compensation)
 		, resonance(resonance)
 		, cutoff_base(cutoff_base)
 		, cutoff_lfo(cutoff_lfo)

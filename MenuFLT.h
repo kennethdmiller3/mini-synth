@@ -18,6 +18,7 @@ namespace Menu
 			TITLE,
 			MODE,
 			DRIVE,
+			COMPENSATION,
 			RESONANCE,
 			CUTOFF_BASE,
 			CUTOFF_LFO,

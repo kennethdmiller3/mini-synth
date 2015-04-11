@@ -30,6 +30,9 @@ namespace Menu
 		case DRIVE:
 			UpdatePercentageProperty(flt_config.drive, sign, modifiers, 0, 10);
 			break;
+		case COMPENSATION:
+			UpdatePercentageProperty(flt_config.compensation, sign, modifiers, 0, 1);
+			break;
 		case RESONANCE:
 			UpdatePercentageProperty(flt_config.resonance, sign, modifiers, 0, 4);
 			break;
@@ -80,6 +83,9 @@ namespace Menu
 			break;
 		case DRIVE:
 			PrintItemFloat(hOut, pos, flags, "Drive:    % 7.1f%%", flt_config.drive * 100.0f);
+			break;
+		case COMPENSATION:
+			PrintItemFloat(hOut, pos, flags, "Gain Comp:% 7.1f%%", flt_config.compensation * 100.0f);
 			break;
 		case RESONANCE:
 			PrintItemFloat(hOut, pos, flags, "Resonance:% 7.1f%%", flt_config.resonance * 100.0f);
