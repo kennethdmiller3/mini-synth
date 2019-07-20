@@ -9,6 +9,13 @@ Spectrum Analyzer Display
 #include "DisplaySpectrumAnalyzer.h"
 #include "Math.h"
 
+extern float output_scale;
+
+static float const SCALE = 2.0f;
+static int const FREQUENCY_BINS = FFT_SIZE / 2;
+
+#define SPECTRUM_PEAK_POWER
+
 // frequency constants
 static float const semitone = 1.0594630943592952645618252949463f;	//powf(2.0f, 1.0f / 12.0f);
 static float const quartertone = 0.97153194115360586874328941582127f;	//1/sqrtf(semitone)
@@ -140,12 +147,20 @@ void DisplaySpectrumAnalyzer::Update(HANDLE hOut, DWORD stream, BASS_INFO const 
 			continue;
 		}
 
+#ifdef SPECTRUM_PEAK_POWER
+		// peak power within the semitone band
+		float value = 0.0f;
+		for (; b0 < b1; ++b0)
+			value = Max(value, fft[b0][0] * fft[b0][0] + fft[b0][1] * fft[b0][1]);
+		spectrum[x] = prev_value = SCALE * value;
+#else
 		// sum power across the semitone band
 		float scale = SCALE / float(b1 - b0);
 		float value = 0.0f;
 		for (; b0 < b1; ++b0)
 			value += fft[b0][0] * fft[b0][0] + fft[b0][1] * fft[b0][1];
 		spectrum[x] = prev_value = scale * value;
+#endif
 	}
 
 	// inaudible band

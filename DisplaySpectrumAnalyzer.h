@@ -11,9 +11,7 @@ Spectrum Analyzer Display
 
 // fast fourier transform properties
 #define FFT_TYPE 5
-static int const SCALE = 128;
 static int const FFT_SIZE = 256 << FFT_TYPE;
-static int const FREQUENCY_BINS = FFT_SIZE / 2;
 
 class DisplaySpectrumAnalyzer
 {
