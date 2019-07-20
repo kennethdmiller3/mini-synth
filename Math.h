@@ -75,8 +75,7 @@ static inline int RoundInt(float const x)
 #if 0//_M_IX86_FP > 0
 	return int(roundf(x));
 #elif _M_IX86_FP > 0
-	register __m128 xx = _mm_load_ss(&x);
-	return _mm_cvtss_si32(_mm_add_ss(_mm_add_ss(xx, xx), _mm_set_ss(0.5f))) >> 1;
+	return _mm_cvt_ss2si(_mm_set_ss(x + x + 0.5f)) >> 1;
 #else
 	float const round_nearest = 0.5f;
 	int i;
@@ -98,8 +97,7 @@ static inline int FloorInt(float const x)
 #if 0//_M_IX86_FP > 0
 	return int(floorf(x));
 #elif _M_IX86_FP > 0
-	register __m128 xx = _mm_load_ss(&x);
-	return _mm_cvtss_si32(_mm_add_ss(_mm_add_ss(xx, xx), _mm_set_ss(-0.5f))) >> 1;
+	return _mm_cvt_ss2si(_mm_set_ss(x + x - 0.5f)) >> 1;
 #else
 	float const round_minus_infinity = -0.5f;
 	int i;
@@ -121,8 +119,7 @@ static inline int CeilingInt(float const x)
 #if 0//_M_IX86_FP > 0
 	return int(ceilf(x));
 #elif _M_IX86_FP > 0
-	register __m128 xx = _mm_load_ss(&x);
-	return -(_mm_cvtss_si32(_mm_sub_ss(_mm_set_ss(-0.5f), _mm_add_ss(xx, xx))) >> 1);
+	return -(_mm_cvt_ss2si(_mm_set_ss(-0.5f - (x + x))) >> 1);
 #else
 	float const round_plus_infinity = -0.5f;
 	int i;
@@ -142,7 +139,7 @@ static inline int CeilingInt(float const x)
 static inline int TruncateInt(float const x)
 {
 #if _M_IX86_FP > 0
-	return int(x);
+	return _mm_cvtt_ss2si(_mm_set_ss(x));
 #else
 	float const round_minus_infinity = -0.5f;
 	int i;
