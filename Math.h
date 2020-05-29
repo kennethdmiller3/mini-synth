@@ -11,7 +11,7 @@ Math Functions
 #endif
 
 // square a value
-// (useful when x is a long or compicated expression)
+// (useful when x is a long or complicated expression)
 template<typename T> static inline T Squared(T x)
 {
 	return x * x;
